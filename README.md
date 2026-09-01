@@ -1,8 +1,68 @@
-# Product Engineering Starter v2 (PES v2)
+# CitizenAI
 
-PES v2 is a **graph-aware product engineering governance system**. It preserves PES governance—typed approvals, vertical slices, deterministic gates, exact-SHA certification, rollback and human release authority—while making execution, evidence lineage and durable product memory first-class.
+CitizenAI is a premium UK Life in the UK preparation product built around three questions:
 
-## Core model
+1. **Am I ready?**
+2. **What should I study now?**
+3. **Why did I get this wrong?**
+
+It combines a verified, source-grounded UK knowledge layer with concept mastery, retention modeling, Pass Intelligence, and next-best-study guidance. The product deliberately avoids becoming another large question bank.
+
+## Product core
+
+```text
+Verified UK Sources
+        ↓
+Versioned Knowledge Pack
+        ↓
+Concept + Question Model
+        ↓
+Diagnostic / Attempts
+        ↓
+Mastery + Retention
+        ↓
+Pass Intelligence
+        ↓
+Next-Best-Study Engine
+        ↓
+Learn / Compare / Recall / Mock
+        ↓
+Pass Ready
+```
+
+## MVP
+
+- UK Life in the UK only
+- Verified source provenance and content versioning
+- Adaptive diagnostic
+- Concept mastery + uncertainty
+- Retention / forgetting model
+- Pass Intelligence readiness estimate
+- Next-best-study planning
+- Learn / Compare / Recall / Question interventions
+- 24-question mock flow
+- Pass Ready maintenance mode
+- Admin/content review and immutable knowledge-pack publishing
+- 28-screen approved functional inventory
+
+See:
+
+- `docs/CITIZENAI-PRODUCT-INTAKE.md`
+- `docs/CITIZENAI-VERTICAL-SLICES.md`
+
+## UI direction
+
+CitizenAI uses a sophisticated, calm, premium light-mode design system with strong typography, high whitespace, restrained blue/indigo accents, limited teal support, subtle depth, and minimal gamification.
+
+Approved core visual journey:
+
+```text
+Welcome → Diagnostic Result → Home → Learning → Pass Ready
+```
+
+## Engineering governance — PES v2
+
+This repository was created from **Product Engineering Starter v2 (PES v2)** and retains its governance model:
 
 ```text
 Governance
@@ -16,39 +76,26 @@ Ranked Bounded Context → Plan → Execute → Evaluate → Keep / Revise / Rev
                                       Exact-SHA Certification
                                                  ↓
                                            Human Approval
-
-Optional optimization only after proof:
-Single worker baseline ⇄ Measured multi-agent candidate → benchmark gate → explicit enablement
 ```
 
-PES v2 does **not** make graph databases or multi-agent swarms mandatory. The default remains the cheapest architecture that can safely satisfy the task.
+PES-v2 remains in Lite / single-worker mode for CitizenAI initially. Multi-agent execution is disabled until a measured workload demonstrates a material benefit.
 
-## What changes from PES v1
+## Current CitizenAI delivery plan
 
-- Loop Engineering is absorbed as native **Ratchet Execution**.
-- Decisions, artifacts, evidence, evaluations and agent runs become durable graph-addressable state.
-- Graph writes are append-oriented and provenance-bearing rather than silent in-place rewrites.
-- Corrections create immutable supersession chains.
-- Context is ranked from bounded relevant state instead of replaying whole histories.
-- Verified/recent state is preferred while material contradictions remain visible.
-- Superseded seeds resolve to current state before retrieval.
-- Context packs are token-bounded and content-hashed so unchanged work can be detected.
-- Governance gates verify lifecycle order, approvals, permissions, linked evidence, context freshness, contradictions, protected paths and delivery-graph readiness.
-- Certification binds the exact commit SHA to context, gate result, graph-linked artifacts/evidence/evaluations, candidate hash and human approval.
-- Failed attempts remain useful lineage.
-- Cost, token, concurrency, retry, wall-clock and graph-write budgets are explicit.
-- Multi-agent execution is benchmark-gated, isolated, reducer-driven and **disabled by default**.
-- Human authority over scope, policy, certification, release and production enablement is unchanged.
+- **VS-01 Foundation** — in progress
+- **VS-02 Design System** — planned
+- **VS-03 UK Knowledge Pack** — planned
+- **VS-04 Diagnostic** — planned
+- **VS-05 Mastery Engine** — planned
+- **VS-06 Pass Intelligence** — planned
+- **VS-07 Study Engine** — planned
+- **VS-08 Learning UX** — planned
+- **VS-09 Mock Test** — planned
+- **VS-10 Pass Ready** — planned
+- **VS-11 Admin / Content Ops** — planned
+- **VS-12 End-to-End Certification** — planned
 
-## Five planes
-
-1. **Control** — objectives, scope, permissions, plans, budgets and stop rules.
-2. **Execution** — tools, code changes, tests and isolated workers.
-3. **Artifact** — immutable/versioned plans, diffs, screenshots, reports and metrics.
-4. **Graph** — decisions, claims, evidence, relations, task dependencies and lineage.
-5. **Evaluation** — deterministic checks, rubrics, specialist review and human gates.
-
-## Quick start
+## PES-v2 commands
 
 Requires Node.js 24+.
 
@@ -62,7 +109,7 @@ npm run graph:validate
 Build ranked bounded context:
 
 ```bash
-npm run context:build -- OBJ-007
+npm run context:build -- <objective-id>
 ```
 
 Evaluate a PES lifecycle transition:
@@ -80,39 +127,6 @@ npm run cert -- verify certified.json [exact-commit-sha]
 npm run cert -- store certified.json
 ```
 
-Assess—not automatically enable—a multi-agent plan:
+## Content boundary
 
-```bash
-npm run multi-agent -- assess plan.json benchmark.json
-npm run multi-agent -- record plan.json benchmark.json BENCH-001
-```
-
-Inspect durable graph memory:
-
-```bash
-npm run graph:memory -- current OBJ-006
-npm run graph:memory -- lineage OBJ-007
-npm run graph:memory -- provenance OBJ-007
-```
-
-## Current implementation status
-
-- **VS-01 Foundation** ✅ — core domain model, budgets, graph invariants and CI.
-- **VS-02 Ratchet Engine** ✅ — durable attempts, evaluator contracts, artifact versions, reversible execution and recovery.
-- **VS-03 Graph Memory** ✅ — append-oriented state, provenance, correction/supersession, cross-session lineage queries and Ratchet publication.
-- **VS-04 Context Builder** ✅ — relevance ranking, recency, verified-state preference, contradiction inclusion, token-aware serialization and context hashing.
-- **VS-05 PES Gate Integration** ✅ — deterministic lifecycle/approval/evidence/risk/protected-path gates and delivery-graph triggers.
-- **VS-06 Certification** ✅ — exact-SHA candidate bundles, graph-linked traceability, human hash-bound approval, immutable certification store and historical verification.
-- **VS-07 Measured Multi-Agent Execution** — deterministic dependency waves, isolation/reducer contracts, write-conflict serialization, budget gates and single-vs-multi benchmark qualification.
-
-### Default activation posture
-
-PES v2 remains in **Lite / single-worker mode**:
-
-- `multiAgent.enabled = false`
-- `maxSubAgents = 0`
-- `maxConcurrentWorkers = 1`
-
-So VS-07 adds **no normal multi-agent runtime cost**. A real product workload must first demonstrate measurable value, then budgets and the feature must be explicitly enabled through normal PES governance.
-
-See `docs/PES-V2-DESIGN.md`, `docs/VS-02-RATCHET-ENGINE.md`, `docs/VS-03-GRAPH-MEMORY.md`, `docs/VS-04-CONTEXT-BUILDER.md`, `docs/VS-05-PES-GATE-INTEGRATION.md`, `docs/VS-06-CERTIFICATION.md`, `docs/VS-07-MEASURED-MULTI-AGENT.md` and `docs/MIGRATION-FROM-V1.md`.
+CitizenAI will not reproduce the official handbook wholesale. MVP knowledge content will be independently authored from legally usable official/public sources, with explicit provenance, versioning, change detection, and human publication authority.
