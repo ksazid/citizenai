@@ -1,6 +1,6 @@
 {
-  "name": "product-engineering-starter-v2",
-  "version": "0.7.0",
+  "name": "citizenai",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:citizenai": "node --test test/citizenai/*.test.mjs",
     "pes:validate": "node scripts/validate.mjs",
     "preflight": "npm run pes:validate && npm test",
     "context:build": "node scripts/context-builder.mjs",
