@@ -6,6 +6,7 @@ import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
 import { SCREEN_IDS, ScreenId } from './src/model';
 import { CitizenAIRuntimeProvider } from './src/runtime';
+import './src/verifiedPackInstall';
 import { screenComponents } from './src/screens';
 import { theme } from './src/theme';
 
