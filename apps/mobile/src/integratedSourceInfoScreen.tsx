@@ -13,19 +13,20 @@ function SourceInfo({ navigate, goBack }: Props) {
     <AppHeader onBack={goBack} />
     <Text style={typography.h1}>Sources & version</Text>
     <Card tone="soft">
-      <View style={s.row}><Text style={s.title}>UK Knowledge Pack</Text><Pill label="Verified foundation" tone="success" /></View>
+      <View style={s.row}><Text style={s.title}>UK Knowledge Pack</Text><Pill label="Expanded verified review" tone="success" /></View>
       <Text style={s.copy}>Version {VERIFIED_UK_PACK_META.version}</Text>
-      <Text style={s.copy}>Every active question in this foundation resolves to an approved canonical fact, evidence record and official public source.</Text>
+      <Text style={s.copy}>Every included question resolves to an approved canonical fact, evidence record and official public source.</Text>
     </Card>
     <Card>
-      <ListRow title="Official sources" meta="GOV.UK · UK Parliament · Electoral Commission · ONS · UK Supreme Court" trailing={`${VERIFIED_UK_PACK_META.sourceCount}`} icon="shield-checkmark-outline" />
+      <ListRow title="Official sources" meta="GOV.UK · UK Parliament · Electoral Commission · National Archives · ONS · UK Supreme Court" trailing={`${VERIFIED_UK_PACK_META.sourceCount}`} icon="shield-checkmark-outline" />
+      <ListRow title="Verified concepts" meta="Government · rights · history · culture" trailing={`${VERIFIED_UK_PACK_META.conceptCount}`} icon="git-network-outline" />
       <ListRow title="Verified facts" meta="Approved with explicit evidence" trailing={`${VERIFIED_UK_PACK_META.factCount}`} icon="document-text-outline" />
       <ListRow title="Question variants" meta="Independently authored; provenance verified" trailing={`${VERIFIED_UK_PACK_META.questionCount}`} icon="help-circle-outline" />
-      <ListRow title="Pack state" meta="Fact-verified, coverage certification still open" trailing="Review" icon="layers-outline" hideDivider />
+      <ListRow title="Coverage gaps" meta="Still block activation" trailing={`${VERIFIED_UK_PACK_META.openGapCount}`} icon="alert-circle-outline" hideDivider />
     </Card>
     <Card tone="warning">
       <Text style={s.warningTitle}>Exam-completeness is not claimed yet</Text>
-      <Text style={s.copy}>The official test is based on the Guide for New Residents. This pack deliberately remains blocked from “exam complete” status until lawful coverage mapping is certified.</Text>
+      <Text style={s.copy}>This is expanded verified public-source coverage, not a claim of 100% Guide alignment. Activation stays blocked until remaining areas, full source snapshots and exact-version human coverage certification are complete.</Text>
     </Card>
     <Button secondary label="Back to profile" onPress={() => navigate('profile')} />
   </View>;
