@@ -12,6 +12,7 @@
     "pes:validate": "node scripts/validate.mjs",
     "preflight": "npm run pes:validate && npm test",
     "start:api": "node src/citizenai/api-server.mjs",
+    "staging:verify-db": "node scripts/verify-staging-db.mjs",
     "context:build": "node scripts/context-builder.mjs",
     "ratchet:evaluate": "node scripts/ratchet-evaluate.mjs",
     "ratchet:fixture": "node scripts/ratchet-fixture.mjs",
