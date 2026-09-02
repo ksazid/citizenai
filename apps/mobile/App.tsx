@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
+import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
 import { SCREEN_IDS, ScreenId } from './src/model';
 import { CitizenAIRuntimeProvider } from './src/runtime';
@@ -24,6 +25,7 @@ function MobileApp() {
     // CI reference captures deliberately render the frozen approved anchors exactly.
     if (captureScreen && current === captureScreen && approvedAnchorScreens[current]) return approvedAnchorScreens[current]!;
     return integratedCoreScreens[current]
+      ?? integratedLearningScreens[current]
       ?? integratedLifecycleScreens[current]
       ?? approvedAnchorScreens[current]
       ?? screenComponents[current];
