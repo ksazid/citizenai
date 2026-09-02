@@ -11,6 +11,7 @@
     "test:citizenai": "node --test test/citizenai/*.test.mjs",
     "pes:validate": "node scripts/validate.mjs",
     "preflight": "npm run pes:validate && npm test",
+    "start:api": "node src/citizenai/api-server.mjs",
     "context:build": "node scripts/context-builder.mjs",
     "ratchet:evaluate": "node scripts/ratchet-evaluate.mjs",
     "ratchet:fixture": "node scripts/ratchet-fixture.mjs",
@@ -19,5 +20,8 @@
     "gate:evaluate": "node scripts/gate-evaluate.mjs",
     "cert": "node scripts/certification.mjs",
     "multi-agent": "node scripts/multi-agent.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
   }
 }
