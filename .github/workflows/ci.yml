@@ -18,6 +18,22 @@ jobs:
           node-version: '24'
       - run: npm run preflight
 
+  uk-source-snapshot-backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Capture every authoritative UK source body
+        run: node scripts/capture-uk-source-snapshots.mjs
+      - name: Upload exact source-body hash manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-uk-source-snapshots
+          path: .artifacts/uk-source-snapshots.json
+          if-no-files-found: error
+
   mobile-typecheck:
     runs-on: ubuntu-latest
     defaults:
