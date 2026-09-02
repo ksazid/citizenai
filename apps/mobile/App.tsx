@@ -4,8 +4,10 @@ import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
 import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
+import { integratedSourceInfoScreen } from './src/integratedSourceInfoScreen';
 import { SCREEN_IDS, ScreenId } from './src/model';
 import { CitizenAIRuntimeProvider } from './src/runtime';
+import './src/verifiedPackInstall';
 import { screenComponents } from './src/screens';
 import { theme } from './src/theme';
 
@@ -26,6 +28,7 @@ function MobileApp() {
     if (captureScreen && current === captureScreen && approvedAnchorScreens[current]) return approvedAnchorScreens[current]!;
     return integratedCoreScreens[current]
       ?? integratedLearningScreens[current]
+      ?? integratedSourceInfoScreen[current]
       ?? integratedLifecycleScreens[current]
       ?? approvedAnchorScreens[current]
       ?? screenComponents[current];
