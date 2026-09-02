@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "CitizenAI",
+    "slug": "citizenai",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": { "supportsTablet": false, "bundleIdentifier": "ai.citizen.mobile" },
+    "android": { "package": "ai.citizen.mobile" },
+    "web": { "bundler": "metro" }
+  }
+}
