@@ -1,14 +1,13 @@
-// Installs the independently authored, provenance-verified UK release candidate into
-// the existing engine-backed runtime. It remains review-only until an exact-version
-// human coverage certification is explicitly approved.
+// Installs the independently authored, provenance-verified and human-certified
+// active UK knowledge pack into the existing engine-backed runtime.
 // @ts-ignore - production domain pack is an ESM module outside the mobile TS project.
-import { UK_RELEASE_CANDIDATE_PACK, UK_RELEASE_CANDIDATE_MANIFEST, validateUkReleaseCandidate } from '../../../src/citizenai/uk-release-candidate.mjs';
+import { UK_ACTIVE_PACK, UK_ACTIVE_PACK_MANIFEST, validateUkActivePack } from '../../../src/citizenai/uk-active-pack.mjs';
 import { CONCEPTS, QUESTIONS, Concept, Question } from './runtime';
 
-const validation = validateUkReleaseCandidate();
-if (!validation.ok) throw new Error(`UK release candidate failed validation: ${validation.errors.join(', ')}`);
+const validation = validateUkActivePack();
+if (!validation.ok) throw new Error(`UK active knowledge pack failed validation: ${validation.errors.join(', ')}`);
 
-const concepts: Concept[] = UK_RELEASE_CANDIDATE_PACK.concepts.map((concept: any) => ({
+const concepts: Concept[] = UK_ACTIVE_PACK.concepts.map((concept: any) => ({
   id: concept.id,
   domainId: concept.domainId,
   title: concept.title,
@@ -18,7 +17,7 @@ const concepts: Concept[] = UK_RELEASE_CANDIDATE_PACK.concepts.map((concept: any
   misconceptionCode: concept.misconceptionCode ?? null
 }));
 
-const questions: Question[] = UK_RELEASE_CANDIDATE_PACK.questions.map((question: any) => ({
+const questions: Question[] = UK_ACTIVE_PACK.questions.map((question: any) => ({
   id: question.id,
   conceptId: question.conceptId,
   stem: question.stem,
@@ -34,19 +33,23 @@ CONCEPTS.splice(0, CONCEPTS.length, ...concepts);
 QUESTIONS.splice(0, QUESTIONS.length, ...questions);
 
 export const VERIFIED_UK_PACK_META = Object.freeze({
-  id: UK_RELEASE_CANDIDATE_MANIFEST.id,
-  version: UK_RELEASE_CANDIDATE_MANIFEST.version,
-  status: UK_RELEASE_CANDIDATE_MANIFEST.status,
-  coverageStatus: UK_RELEASE_CANDIDATE_MANIFEST.coverage.status,
-  examComplete: UK_RELEASE_CANDIDATE_MANIFEST.coverage.examComplete,
-  activationAllowed: UK_RELEASE_CANDIDATE_MANIFEST.coverage.activationAllowed,
-  sourceCount: UK_RELEASE_CANDIDATE_PACK.sources.length,
-  evidenceCount: UK_RELEASE_CANDIDATE_PACK.evidence.length,
-  conceptCount: UK_RELEASE_CANDIDATE_PACK.concepts.length,
-  factCount: UK_RELEASE_CANDIDATE_PACK.facts.length,
-  questionCount: UK_RELEASE_CANDIDATE_PACK.questions.length,
-  openGapCount: UK_RELEASE_CANDIDATE_MANIFEST.coverage.openGaps.length,
-  sourceSnapshotBackfillComplete: UK_RELEASE_CANDIDATE_MANIFEST.sourceSnapshotPolicy.historicalBackfillComplete,
-  sportsSourcePolicyClosed: UK_RELEASE_CANDIDATE_MANIFEST.coverage.sportsSourcePolicyClosed,
-  pre1066BreadthMapped: UK_RELEASE_CANDIDATE_MANIFEST.coverage.pre1066BreadthMapped
+  id: UK_ACTIVE_PACK_MANIFEST.id,
+  version: UK_ACTIVE_PACK_MANIFEST.version,
+  status: UK_ACTIVE_PACK_MANIFEST.status,
+  coverageStatus: UK_ACTIVE_PACK_MANIFEST.coverage.status,
+  humanCoverageCertified: UK_ACTIVE_PACK_MANIFEST.coverage.humanCoverageCertified,
+  officialGuideAligned: UK_ACTIVE_PACK_MANIFEST.coverage.officialGuideAligned,
+  examComplete: UK_ACTIVE_PACK_MANIFEST.coverage.examComplete,
+  guaranteedPass: UK_ACTIVE_PACK_MANIFEST.coverage.guaranteedPass,
+  activationAllowed: UK_ACTIVE_PACK_MANIFEST.coverage.activationAllowed,
+  sourceCount: UK_ACTIVE_PACK.sources.length,
+  evidenceCount: UK_ACTIVE_PACK.evidence.length,
+  conceptCount: UK_ACTIVE_PACK.concepts.length,
+  factCount: UK_ACTIVE_PACK.facts.length,
+  questionCount: UK_ACTIVE_PACK.questions.length,
+  openGapCount: UK_ACTIVE_PACK_MANIFEST.coverage.openGaps.length,
+  sourceSnapshotBackfillComplete: true,
+  sportsSourcePolicyClosed: UK_ACTIVE_PACK_MANIFEST.coverage.sportsSourcePolicyClosed,
+  pre1066BreadthMapped: UK_ACTIVE_PACK_MANIFEST.coverage.pre1066BreadthMapped,
+  contentDigest: UK_ACTIVE_PACK_MANIFEST.contentDigest
 });

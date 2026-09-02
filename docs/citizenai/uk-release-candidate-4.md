@@ -2,7 +2,7 @@
 
 Exact pack version: `2026.09.02-rc.4`
 Pack id: `GB-2026.09.02-rc.4`
-State: `review`
+State: `review` → **human coverage certified**
 
 ## Engineering scope
 
@@ -21,33 +21,31 @@ State: `review`
 
 GOV.UK states that the Life in the UK Test is based on the official Guide for New Residents. CitizenAI does not reproduce or translate that guide. This pack is independently authored from authoritative public sources.
 
-Therefore this release candidate does **not** self-declare official-guide alignment, exam completeness or guaranteed pass coverage.
+Human certification approves the independently sourced coverage for CitizenAI's stated preparation product. It does **not** assert official-guide equivalence, exhaustive official-exam coverage, or a guaranteed pass result.
 
 ## Exact-version human certification
 
-The final reviewer must explicitly review **this exact pack version** and decide whether the public-source scope map is sufficient for CitizenAI's stated preparation product.
+The product owner approved **this exact pack version** after the engineering, provenance, public-source coverage, sports-source, pre-1066 breadth, and 65/65 live source-body snapshot gates passed.
 
-The reviewer should verify:
+Approval checklist:
 
-1. The source policy is acceptable and no commercial study material is used as canonical evidence.
-2. Government, rights, history and culture domains have reasonable breadth for the product's preparation claims.
-3. Sports coverage is acceptably grounded in government/public bodies.
-4. Pre-1066 breadth is acceptably represented without copied handbook wording.
-5. Every source has a successful source-body snapshot in the CI artifact for this exact version.
-6. Question wording is independently authored and answers resolve to canonical facts.
-7. Product wording remains `estimated readiness` / `Pass Ready`, never a guaranteed exam result.
-8. Any approval applies only to `2026.09.02-rc.4`; a changed pack requires a new certification.
+1. Source policy acceptable; no commercial study material is canonical evidence. ✅
+2. Government, rights, history and culture domains have reasonable breadth for CitizenAI's preparation claims. ✅
+3. Sports coverage is grounded in government/public bodies. ✅
+4. Pre-1066 breadth is represented without copied handbook wording. ✅
+5. 65/65 source-body snapshots succeeded for the exact version. ✅
+6. Question wording is independently authored and resolves to canonical facts. ✅
+7. Product wording remains `estimated readiness` / `Pass Ready`, never a guaranteed exam result. ✅
+8. Approval applies only to `2026.09.02-rc.4`; changed factual content requires recertification. ✅
 
 ## Approval record
 
-Not approved yet.
-
-Required fields:
-
 - `approved: true`
-- `reviewerId: <human reviewer>`
+- `reviewerId: ksazid`
 - `exactPackVersion: 2026.09.02-rc.4`
-- `reviewedAt: <timestamp>`
-- optional reviewer notes
+- `reviewedAt: 2026-09-02T11:09:23.000Z`
+- source snapshot workflow: `33619666540`
+- snapshot artifact: `9842390335`
+- snapshot coverage: `65/65`
 
-Activation must remain blocked until this explicit human record exists.
+The immutable machine-readable record is `src/citizenai/uk-rc4-approval.mjs`.

@@ -91,3 +91,20 @@ jobs:
             apps/mobile/src/screens.tsx
             apps/mobile/src/theme.ts
           if-no-files-found: error
+
+  uk-release-package:
+    needs: [validate, uk-source-snapshot-backfill, mobile-typecheck, visual-anchor-capture]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build certified active UK pack
+        run: node scripts/build-uk-release-package.mjs
+      - name: Upload immutable UK release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-uk-pack-2026.09.02.1
+          path: .artifacts/citizenai-uk-pack-2026.09.02.1.json
+          if-no-files-found: error
