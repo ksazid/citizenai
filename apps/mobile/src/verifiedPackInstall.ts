@@ -1,14 +1,14 @@
-// Installs the independently authored, provenance-verified expanded UK review pack into
+// Installs the independently authored, provenance-verified UK coverage candidate into
 // the existing engine-backed runtime. The pack remains status=review and is not presented
 // as exam-complete until lawful exact-version coverage certification is complete.
 // @ts-ignore - production domain pack is an ESM module outside the mobile TS project.
-import { UK_PACK_V2, validateUkPackV2 } from '../../../src/citizenai/uk-knowledge-pack-v2.mjs';
+import { UK_CANDIDATE_PACK, UK_CANDIDATE_MANIFEST, validateUkCandidatePack } from '../../../src/citizenai/uk-knowledge-pack-candidate.mjs';
 import { CONCEPTS, QUESTIONS, Concept, Question } from './runtime';
 
-const validation = validateUkPackV2();
+const validation = validateUkCandidatePack();
 if (!validation.ok) throw new Error(`UK knowledge pack failed validation: ${validation.errors.join(', ')}`);
 
-const concepts: Concept[] = UK_PACK_V2.concepts.map((concept: any) => ({
+const concepts: Concept[] = UK_CANDIDATE_PACK.concepts.map((concept: any) => ({
   id: concept.id,
   domainId: concept.domainId,
   title: concept.title,
@@ -18,7 +18,7 @@ const concepts: Concept[] = UK_PACK_V2.concepts.map((concept: any) => ({
   misconceptionCode: concept.misconceptionCode ?? null
 }));
 
-const questions: Question[] = UK_PACK_V2.questions.map((question: any) => ({
+const questions: Question[] = UK_CANDIDATE_PACK.questions.map((question: any) => ({
   id: question.id,
   conceptId: question.conceptId,
   stem: question.stem,
@@ -34,16 +34,17 @@ CONCEPTS.splice(0, CONCEPTS.length, ...concepts);
 QUESTIONS.splice(0, QUESTIONS.length, ...questions);
 
 export const VERIFIED_UK_PACK_META = Object.freeze({
-  id: UK_PACK_V2.manifest.id,
-  version: UK_PACK_V2.manifest.version,
-  status: UK_PACK_V2.manifest.status,
-  coverageStatus: UK_PACK_V2.manifest.coverage.status,
-  examComplete: UK_PACK_V2.manifest.coverage.examComplete,
-  activationAllowed: UK_PACK_V2.manifest.coverage.activationAllowed,
-  sourceCount: UK_PACK_V2.sources.length,
-  evidenceCount: UK_PACK_V2.evidence.length,
-  conceptCount: UK_PACK_V2.concepts.length,
-  factCount: UK_PACK_V2.facts.length,
-  questionCount: UK_PACK_V2.questions.length,
-  openGapCount: UK_PACK_V2.manifest.coverage.openGaps.length
+  id: UK_CANDIDATE_MANIFEST.id,
+  version: UK_CANDIDATE_MANIFEST.version,
+  status: UK_CANDIDATE_MANIFEST.status,
+  coverageStatus: UK_CANDIDATE_MANIFEST.coverage.status,
+  examComplete: UK_CANDIDATE_MANIFEST.coverage.examComplete,
+  activationAllowed: UK_CANDIDATE_MANIFEST.coverage.activationAllowed,
+  sourceCount: UK_CANDIDATE_PACK.sources.length,
+  evidenceCount: UK_CANDIDATE_PACK.evidence.length,
+  conceptCount: UK_CANDIDATE_PACK.concepts.length,
+  factCount: UK_CANDIDATE_PACK.facts.length,
+  questionCount: UK_CANDIDATE_PACK.questions.length,
+  openGapCount: UK_CANDIDATE_MANIFEST.coverage.openGaps.length,
+  sourceSnapshotBackfillComplete: UK_CANDIDATE_MANIFEST.sourceSnapshotPolicy.historicalBackfillComplete
 });
