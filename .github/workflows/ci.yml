@@ -67,3 +67,11 @@ jobs:
           name: citizenai-approved-anchor-screenshots
           path: apps/mobile/screenshots/*.png
           if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-ui-source-snapshot
+          path: |
+            apps/mobile/src/components.tsx
+            apps/mobile/src/screens.tsx
+            apps/mobile/src/theme.ts
+          if-no-files-found: error
