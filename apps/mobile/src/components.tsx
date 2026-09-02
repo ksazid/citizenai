@@ -86,7 +86,7 @@ export function ProgressRing({ score, label, size = 172, stroke = 10, color = th
   const circumference = 2 * Math.PI * radius;
   const progress = Math.max(0, Math.min(100, score)) / 100;
   return <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-    <Svg width={size} height={size} style={StyleSheet.absoluteFillObject}>
+    <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
       <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#DCE8FB" strokeWidth={stroke} fill="transparent" />
       <Circle cx={size / 2} cy={size / 2} r={radius} stroke={color} strokeWidth={stroke} fill="transparent" strokeDasharray={`${circumference * progress} ${circumference}`} strokeLinecap="round" rotation="-90" origin={`${size / 2}, ${size / 2}`} />
     </Svg>
