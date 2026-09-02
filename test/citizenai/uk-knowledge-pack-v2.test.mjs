@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UK_PACK_V2, UK_PACK_V2_MANIFEST, validateUkPackV2 } from '../../src/citizenai/uk-knowledge-pack-v2.mjs';
+import { UK_PACK_MANIFEST } from '../../src/citizenai/uk-knowledge-pack-v1.mjs';
 import { ukPackReleaseGate } from '../../src/citizenai/uk-pack-ops.mjs';
 
 test('expanded UK review pack validates with 39 concepts and 117 questions', () => {
@@ -19,10 +20,11 @@ test('expanded coverage remains review-only and cannot claim exam completeness',
 
 test('all expanded questions preserve fact provenance and four-option MCQ contract', () => {
   const facts = new Map(UK_PACK_V2.facts.map((fact) => [fact.id, fact]));
+  const allowedPackVersions = new Set([UK_PACK_MANIFEST.version, UK_PACK_V2_MANIFEST.version]);
   for (const question of UK_PACK_V2.questions) {
     assert.ok(question.factId, `missing factId: ${question.id}`);
     assert.ok(facts.has(question.factId), `fact not found: ${question.id}`);
-    assert.equal(question.packVersion === UK_PACK_V2_MANIFEST.version || question.packVersion === UK_PACK_V2.manifest.basePackId?.replace('GB-', ''), false, false);
+    assert.ok(allowedPackVersions.has(question.packVersion), `unexpected pack version: ${question.id} -> ${question.packVersion}`);
     assert.equal(question.options.length, 4, `wrong option count: ${question.id}`);
     assert.ok(question.options.some((option) => option.id === question.correctOptionId), `correct option missing: ${question.id}`);
     assert.equal(question.provenanceStatus, 'verified');
