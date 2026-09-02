@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { SCREEN_IDS, ScreenId } from './src/model';
 import { screenComponents } from './src/screens';
 import { theme } from './src/theme';
@@ -15,7 +16,7 @@ function initialScreen(): ScreenId {
 export default function App() {
   const [history, setHistory] = useState<ScreenId[]>([initialScreen()]);
   const current = history[history.length - 1];
-  const Screen = useMemo(() => screenComponents[current], [current]);
+  const Screen = useMemo(() => approvedAnchorScreens[current] ?? screenComponents[current], [current]);
 
   const navigate = (screen: ScreenId) => setHistory(prev => [...prev, screen]);
   const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
