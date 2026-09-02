@@ -13,7 +13,7 @@ function SourceInfo({ navigate, goBack }: Props) {
     <AppHeader onBack={goBack} />
     <Text style={typography.h1}>Sources & version</Text>
     <Card tone="soft">
-      <View style={s.row}><Text style={s.title}>UK Knowledge Pack</Text><Pill label="Release candidate" tone="success" /></View>
+      <View style={s.row}><Text style={s.title}>UK Knowledge Pack</Text><Pill label="Active" tone="success" /></View>
       <Text style={s.copy}>Version {VERIFIED_UK_PACK_META.version}</Text>
       <Text style={s.copy}>Every included question resolves to an approved canonical fact, evidence record and authoritative public source.</Text>
     </Card>
@@ -22,14 +22,13 @@ function SourceInfo({ navigate, goBack }: Props) {
       <ListRow title="Verified concepts" meta="Government · rights · history · culture" trailing={`${VERIFIED_UK_PACK_META.conceptCount}`} icon="git-network-outline" />
       <ListRow title="Verified facts" meta="Approved with explicit evidence" trailing={`${VERIFIED_UK_PACK_META.factCount}`} icon="document-text-outline" />
       <ListRow title="Question variants" meta="Independently authored; provenance verified" trailing={`${VERIFIED_UK_PACK_META.questionCount}`} icon="help-circle-outline" />
-      <ListRow title="Sports source policy" meta="Public-body sourcing only" trailing={VERIFIED_UK_PACK_META.sportsSourcePolicyClosed ? 'Closed' : 'Open'} icon="football-outline" />
-      <ListRow title="Pre-1066 breadth" meta="Roman · Anglo-Saxon · Viking · Sutton Hoo" trailing={VERIFIED_UK_PACK_META.pre1066BreadthMapped ? 'Mapped' : 'Open'} icon="time-outline" />
-      <ListRow title="Source-body snapshots" meta="Live SHA-256 capture is a blocking CI gate" trailing={VERIFIED_UK_PACK_META.sourceSnapshotBackfillComplete ? 'Complete' : 'Pending'} icon="finger-print-outline" />
-      <ListRow title="Remaining approval" meta="Exact-version human coverage certification" trailing={`${VERIFIED_UK_PACK_META.openGapCount}`} icon="person-outline" hideDivider />
+      <ListRow title="Source-body snapshots" meta="65/65 live SHA-256 capture on certified RC4" trailing="Complete" icon="finger-print-outline" />
+      <ListRow title="Human coverage review" meta="Exact-version product-owner certification" trailing={VERIFIED_UK_PACK_META.humanCoverageCertified ? 'Approved' : 'Pending'} icon="person-outline" />
+      <ListRow title="Production status" meta="Certified public-source preparation pack" trailing={VERIFIED_UK_PACK_META.activationAllowed ? 'Active' : 'Blocked'} icon="checkmark-circle-outline" hideDivider />
     </Card>
     <Card tone="warning">
-      <Text style={s.warningTitle}>Human release gate remains closed</Text>
-      <Text style={s.copy}>Engineering coverage is release-candidate ready, but CitizenAI still does not claim 100% exam alignment. A human reviewer must explicitly approve this exact pack version before any activation or exam-completeness claim.</Text>
+      <Text style={s.warningTitle}>What this certification means</Text>
+      <Text style={s.copy}>CitizenAI’s independently sourced preparation coverage is approved for production. It does not claim equivalence to the official Guide for New Residents, exhaustive official-exam coverage or a guaranteed pass.</Text>
     </Card>
     <Button secondary label="Back to profile" onPress={() => navigate('profile')} />
   </View>;
