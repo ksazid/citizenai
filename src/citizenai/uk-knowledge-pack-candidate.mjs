@@ -1,5 +1,5 @@
 import { validateQuestionProvenance } from './knowledge.mjs';
-import { UK_PACK_V3, UK_PACK_V3_MANIFEST } from './uk-knowledge-pack-v3.mjs';
+import { UK_PACK_V3, UK_PACK_V3_MANIFEST, validateUkPackV3 } from './uk-knowledge-pack-v3.mjs';
 
 export const UK_CANDIDATE_MANIFEST = Object.freeze({
   ...UK_PACK_V3_MANIFEST,
@@ -67,7 +67,36 @@ export const UK_CANDIDATE_PACK = Object.freeze({
 
 export function validateUkCandidatePack() {
   const errors = [];
+  const inherited = validateUkPackV3();
+  if (!inherited.ok) errors.push(...inherited.errors.map((error) => `v3:${error}`));
+
+  const uniqueIds = (rows) => new Set(rows.map((row) => row.id)).size === rows.length;
+  for (const [name, rows] of [
+    ['sources', UK_CANDIDATE_PACK.sources],
+    ['evidence', UK_CANDIDATE_PACK.evidence],
+    ['concepts', UK_CANDIDATE_PACK.concepts],
+    ['facts', UK_CANDIDATE_PACK.facts],
+    ['questions', UK_CANDIDATE_PACK.questions]
+  ]) {
+    if (!uniqueIds(rows)) errors.push(`duplicate_${name}_id`);
+  }
+
+  const sourcesById = new Map(UK_CANDIDATE_PACK.sources.map((source) => [source.id, source]));
+  const evidenceById = new Map(UK_CANDIDATE_PACK.evidence.map((evidence) => [evidence.id, evidence]));
+  for (const source of UK_CANDIDATE_PACK.sources) {
+    if (source.packId !== UK_CANDIDATE_MANIFEST.id) errors.push(`source_pack_mismatch:${source.id}`);
+    if (source.verificationStatus !== 'approved') errors.push(`source_not_approved:${source.id}`);
+  }
+  for (const evidence of UK_CANDIDATE_PACK.evidence) {
+    if (!sourcesById.has(evidence.sourceId)) errors.push(`evidence_source_missing:${evidence.id}`);
+  }
+
   const factsById = new Map(UK_CANDIDATE_PACK.facts.map((fact) => [fact.id, fact]));
+  for (const fact of UK_CANDIDATE_PACK.facts) {
+    if (fact.verificationStatus !== 'approved' || fact.confidence !== 1 || fact.evidenceIds.length === 0) errors.push(`fact_not_publishable:${fact.id}`);
+    for (const evidenceId of fact.evidenceIds) if (!evidenceById.has(evidenceId)) errors.push(`fact_evidence_missing:${fact.id}:${evidenceId}`);
+  }
+
   const stems = new Set();
   for (const question of UK_CANDIDATE_PACK.questions) {
     const provenance = validateQuestionProvenance({ question, factsById });
@@ -82,8 +111,20 @@ export function validateUkCandidatePack() {
     if (stems.has(question.stem)) errors.push(`duplicate_question_stem:${question.id}`);
     stems.add(question.stem);
   }
+
   if (UK_CANDIDATE_PACK.concepts.length !== 59) errors.push(`concept_count:${UK_CANDIDATE_PACK.concepts.length}`);
   if (UK_CANDIDATE_PACK.questions.length !== 177) errors.push(`question_count:${UK_CANDIDATE_PACK.questions.length}`);
   if (UK_CANDIDATE_MANIFEST.coverage.examComplete || UK_CANDIDATE_MANIFEST.coverage.activationAllowed) errors.push('coverage_gate_must_remain_closed');
-  return Object.freeze({ ok: errors.length === 0, errors: Object.freeze(errors), counts: Object.freeze({ sources: UK_CANDIDATE_PACK.sources.length, evidence: UK_CANDIDATE_PACK.evidence.length, concepts: UK_CANDIDATE_PACK.concepts.length, facts: UK_CANDIDATE_PACK.facts.length, questions: UK_CANDIDATE_PACK.questions.length }) });
+
+  return Object.freeze({
+    ok: errors.length === 0,
+    errors: Object.freeze(errors),
+    counts: Object.freeze({
+      sources: UK_CANDIDATE_PACK.sources.length,
+      evidence: UK_CANDIDATE_PACK.evidence.length,
+      concepts: UK_CANDIDATE_PACK.concepts.length,
+      facts: UK_CANDIDATE_PACK.facts.length,
+      questions: UK_CANDIDATE_PACK.questions.length
+    })
+  });
 }
