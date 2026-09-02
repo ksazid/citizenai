@@ -5,12 +5,13 @@ import { buildSourceSnapshot, sourceSnapshotCoverage } from '../src/citizenai/uk
 
 const OUT_DIR = path.resolve('.artifacts');
 const OUT_FILE = path.join(OUT_DIR, 'uk-source-snapshots.json');
-const TIMEOUT_MS = 25_000;
+const TIMEOUT_MS = 12_000;
 const MIN_BODY_CHARS = 120;
+const CONCURRENCY = 8;
 
 async function fetchText(source) {
   let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const response = await fetch(source.url, {
         redirect: 'follow',
@@ -26,7 +27,7 @@ async function fetchText(source) {
       return { body, finalUrl: response.url, status: response.status };
     } catch (error) {
       lastError = error;
-      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 750));
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600));
     }
   }
   throw new Error(`${source.id} ${source.url}: ${lastError?.message ?? lastError}`);
@@ -35,23 +36,32 @@ async function fetchText(source) {
 await fs.mkdir(OUT_DIR, { recursive: true });
 const snapshots = [];
 const failures = [];
+const queue = [...UK_RELEASE_CANDIDATE_PACK.sources];
 
-for (const source of UK_RELEASE_CANDIDATE_PACK.sources) {
-  try {
-    const fetched = await fetchText(source);
-    snapshots.push(Object.freeze({
-      ...buildSourceSnapshot({ sourceId: source.id, url: source.url, body: fetched.body }),
-      finalUrl: fetched.finalUrl,
-      httpStatus: fetched.status,
-      sourceType: source.sourceType,
-      dynamic: Boolean(source.dynamic)
-    }));
-    console.log(`SNAPSHOT_OK ${source.id}`);
-  } catch (error) {
-    failures.push({ sourceId: source.id, url: source.url, error: String(error?.message ?? error) });
-    console.error(`SNAPSHOT_FAIL ${source.id}: ${error?.message ?? error}`);
+async function worker() {
+  while (queue.length > 0) {
+    const source = queue.shift();
+    if (!source) return;
+    try {
+      const fetched = await fetchText(source);
+      snapshots.push(Object.freeze({
+        ...buildSourceSnapshot({ sourceId: source.id, url: source.url, body: fetched.body }),
+        finalUrl: fetched.finalUrl,
+        httpStatus: fetched.status,
+        sourceType: source.sourceType,
+        dynamic: Boolean(source.dynamic)
+      }));
+      console.log(`SNAPSHOT_OK ${source.id}`);
+    } catch (error) {
+      failures.push({ sourceId: source.id, url: source.url, error: String(error?.message ?? error) });
+      console.error(`SNAPSHOT_FAIL ${source.id}: ${error?.message ?? error}`);
+    }
   }
 }
+
+await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+snapshots.sort((a, b) => a.sourceId.localeCompare(b.sourceId));
+failures.sort((a, b) => a.sourceId.localeCompare(b.sourceId));
 
 const coverage = sourceSnapshotCoverage({ sources: UK_RELEASE_CANDIDATE_PACK.sources, snapshots });
 const artifact = {
@@ -60,6 +70,7 @@ const artifact = {
   generatedAt: new Date().toISOString(),
   algorithm: 'sha256',
   normalizationVersion: 1,
+  concurrency: CONCURRENCY,
   coverage,
   failures,
   snapshots
@@ -69,6 +80,4 @@ await fs.writeFile(OUT_FILE, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
 console.log(`SNAPSHOT_ARTIFACT ${OUT_FILE}`);
 console.log(`SNAPSHOT_COVERAGE ${coverage.snapshotCount}/${coverage.sourceCount}`);
 
-if (failures.length > 0 || !coverage.complete) {
-  process.exitCode = 1;
-}
+if (failures.length > 0 || !coverage.complete) process.exitCode = 1;
