@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createCitizenAIApiClient } from './apiClient';
 
 // These are the production domain engines already certified in the repository.
+// They remain the offline fallback and deterministic visual-test runtime.
 // @ts-ignore
 import { selectDiagnosticQuestion, shouldCompleteDiagnostic, summarizeDiagnostic } from '../../../src/citizenai/diagnostic.mjs';
 // @ts-ignore
@@ -40,6 +43,7 @@ export type Question = {
 
 type DiagnosticAnswer = { conceptId: string; questionId: string; optionId: string | null; correct: boolean };
 type MasteryState = ReturnType<typeof createMasteryState>;
+type BackendState = 'local' | 'connecting' | 'api' | 'error';
 
 type Runtime = {
   examDate: string;
@@ -50,6 +54,8 @@ type Runtime = {
   setPreparation: (value: string) => void;
   daysUntilExam: number;
   visualDemo: boolean;
+  backendState: BackendState;
+  learnerId: string | null;
   diagnosticQuestion: Question;
   diagnosticAnswered: number;
   diagnosticTarget: number;
@@ -59,7 +65,7 @@ type Runtime = {
   readinessScore: number;
   readinessConfidence: number;
   readinessStatus: string;
-  studyPlan: { durationMinutes: number; estimatedGain: number; activities: Array<{ conceptId: string; type: string; minutes: number }> };
+  studyPlan: { durationMinutes: number; estimatedGain: number; activities: Array<{ conceptId: string; type: string; minutes: number; priority?: number }> };
   conceptById: (id: string) => Concept | undefined;
   practiceQuestion: Question;
   lastAttempt: null | { correct: boolean; remediation: any; question: Question };
@@ -80,6 +86,7 @@ type Runtime = {
 };
 
 const DOMAINS: DomainId[] = ['government', 'history', 'rights', 'culture'];
+const LEARNER_STORAGE_KEY = 'citizenai.runtime.learnerId.v1';
 
 export const CONCEPTS: Concept[] = [
   { id: 'parliament-government', domainId: 'government', title: 'Parliament vs Government', importance: 1, baseDifficulty: 0.62, studyMinutes: 4, misconceptionCode: 'parliament_government_reversal' },
@@ -103,7 +110,7 @@ const BASE_QUESTIONS: Omit<Question, 'id' | 'variantId'>[] = [
   { conceptId: 'culture-traditions', stem: 'Which statement best reflects the UK’s civic values?', options: [{ id: 'tol', text: 'Respect for law, freedoms and people with different beliefs' }, { id: 'one', text: 'Only one political opinion is permitted' }, { id: 'relig', text: 'Everyone must follow one religion' }, { id: 'gov', text: 'Government cannot be criticised' }], correctOptionId: 'tol', difficulty: 0.4, explanation: 'Civic life includes respect for law, freedoms and people with different beliefs.' }
 ];
 
-export const QUESTIONS: Question[] = BASE_QUESTIONS.flatMap((question, conceptIndex) => [0, 1, 2].map((variant) => ({
+export const QUESTIONS: Question[] = BASE_QUESTIONS.flatMap((question) => [0, 1, 2].map((variant) => ({
   ...question,
   id: `${question.conceptId}-q${variant + 1}`,
   variantId: `${question.conceptId}-v${variant + 1}`,
@@ -114,7 +121,7 @@ export const QUESTIONS: Question[] = BASE_QUESTIONS.flatMap((question, conceptIn
 const RuntimeContext = createContext<Runtime | null>(null);
 
 const isoDaysUntil = (iso: string) => Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000));
-const scoreStatus = (score: number, confidence: number) => confidence < 0.75 ? 'More evidence needed' : score >= 0.85 ? 'Pass Ready' : score >= 0.75 ? 'Nearly Ready' : score >= 0.6 ? 'Building' : 'Not Ready';
+const scoreStatus = (score: number, confidence: number) => confidence < 0.75 ? 'More evidence needed' : score >= 0.95 ? 'Strongly Ready' : score >= 0.85 ? 'Pass Ready' : score >= 0.75 ? 'Nearly Ready' : score >= 0.6 ? 'Building' : 'Not Ready';
 
 function isVisualCapture() {
   const search = String((globalThis as any).location?.search ?? '');
@@ -122,6 +129,15 @@ function isVisualCapture() {
 }
 
 export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNode }) {
+  const visualDemo = isVisualCapture();
+  const api = useMemo(() => createCitizenAIApiClient(), []);
+  const [backendState, setBackendState] = useState<BackendState>(api.enabled && !visualDemo ? 'connecting' : 'local');
+  const [learnerId, setLearnerId] = useState<string | null>(null);
+  const [remoteDashboard, setRemoteDashboard] = useState<any>(null);
+  const [remoteDiagnostic, setRemoteDiagnostic] = useState<any>(null);
+  const [remoteLearning, setRemoteLearning] = useState<any>(null);
+  const [remoteMockId, setRemoteMockId] = useState<string | null>(null);
+
   const [examDate, setExamDate] = useState('2026-09-14');
   const [explanationLanguage, setExplanationLanguage] = useState('English');
   const [preparation, setPreparation] = useState('Some');
@@ -132,8 +148,65 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
   const [mock, setMock] = useState<any>(null);
   const [mockIndex, setMockIndex] = useState(0);
   const [lastMockResult, setLastMockResult] = useState<any>(null);
-  const [mocksPassed, setMocksPassed] = useState(0);
+  const [localMocksPassed, setLocalMocksPassed] = useState(0);
   const [examOutcome, setExamOutcome] = useState<any>(null);
+
+  async function refreshRemote(id: string) {
+    if (!api.enabled || visualDemo) return;
+    const [dashboard, diagnostic, learning] = await Promise.all([
+      api.dashboard(id),
+      api.nextDiagnostic(id),
+      api.nextLearning(id)
+    ]);
+    setRemoteDashboard(dashboard);
+    setRemoteDiagnostic(diagnostic);
+    setRemoteLearning(learning);
+    setBackendState('api');
+  }
+
+  async function createRemoteLearner() {
+    const learner = await api.createLearner({ examDate, explanationLanguage, preparation });
+    await AsyncStorage.setItem(LEARNER_STORAGE_KEY, learner.id);
+    setLearnerId(learner.id);
+    await refreshRemote(learner.id);
+    return learner.id as string;
+  }
+
+  useEffect(() => {
+    if (!api.enabled || visualDemo) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setBackendState('connecting');
+        const storedId = await AsyncStorage.getItem(LEARNER_STORAGE_KEY);
+        if (cancelled) return;
+        if (storedId) {
+          try {
+            await api.dashboard(storedId);
+            if (cancelled) return;
+            setLearnerId(storedId);
+            await refreshRemote(storedId);
+            return;
+          } catch {
+            await AsyncStorage.removeItem(LEARNER_STORAGE_KEY);
+          }
+        }
+        if (!cancelled) await createRemoteLearner();
+      } catch {
+        if (!cancelled) setBackendState('error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [api, visualDemo]);
+
+  useEffect(() => {
+    if (!api.enabled || !learnerId || visualDemo) return;
+    const timer = setTimeout(() => {
+      api.updateLearner(learnerId, { examDate, explanationLanguage, preparation })
+        .catch(() => setBackendState('error'));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [api, learnerId, examDate, explanationLanguage, preparation, visualDemo]);
 
   const attemptsByConcept = useMemo(() => {
     const map = new Map<string, number>();
@@ -144,10 +217,11 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
   const rankedConcepts = selectDiagnosticQuestion({ concepts: CONCEPTS, attemptsByConcept, limit: 24 });
   const nextConcept = rankedConcepts[0] ?? CONCEPTS[0];
   const nextVariant = attemptsByConcept.get(nextConcept.id) ?? 0;
-  const diagnosticQuestion = QUESTIONS.find(q => q.conceptId === nextConcept.id && q.id.endsWith(`q${(nextVariant % 3) + 1}`)) ?? QUESTIONS[0];
+  const localDiagnosticQuestion = QUESTIONS.find(q => q.conceptId === nextConcept.id && q.id.endsWith(`q${(nextVariant % 3) + 1}`)) ?? QUESTIONS[0];
+  const diagnosticQuestion = remoteDiagnostic?.question?.id ? QUESTIONS.find(q => q.id === remoteDiagnostic.question.id) ?? localDiagnosticQuestion : localDiagnosticQuestion;
 
   const conceptSignals = CONCEPTS.map((concept) => {
-    const state = masteries[concept.id];
+    const state = masteries[concept.id] ?? createMasteryState({ conceptId: concept.id });
     const at = new Date().toISOString();
     return {
       ...concept,
@@ -164,44 +238,65 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
   const testedDomains = new Set(diagnosticAnswers.map(a => CONCEPTS.find(c => c.id === a.conceptId)?.domainId).filter(Boolean));
   const important = CONCEPTS.filter(c => c.importance >= 0.75);
   const testedImportant = new Set(diagnosticAnswers.map(a => a.conceptId));
-  const variantDiversity = conceptSignals.reduce((sum, c) => sum + c.variantDiversity, 0) / conceptSignals.length;
-  const readiness = buildReadiness({
+  const variantDiversity = conceptSignals.reduce((sum, c) => sum + c.variantDiversity, 0) / Math.max(1, conceptSignals.length);
+  const localReadiness = buildReadiness({
     concepts: conceptSignals,
     coverage: {
       domains: DOMAINS.map(id => ({ id, tested: testedDomains.has(id) })),
       importantConcepts: important.map(c => ({ id: c.id, tested: testedImportant.has(c.id) })),
-      mocks: mocksPassed,
+      mocks: localMocksPassed,
       variantDiversity
     }
   });
 
   const conceptsById = new Map(CONCEPTS.map(c => [c.id, c]));
   const diagnosticSummary = summarizeDiagnostic({ answers: diagnosticAnswers, conceptsById });
-  const domainScores = Object.fromEntries(DOMAINS.map(domain => [domain, diagnosticSummary[domain]?.score ?? Math.round(conceptSignals.filter(c => c.domainId === domain).reduce((sum, c) => sum + c.effectiveMastery, 0) / Math.max(1, conceptSignals.filter(c => c.domainId === domain).length) * 100)])) as Record<DomainId, number>;
-  const studyPlan = buildStudyPlan({ concepts: conceptSignals, availableMinutes: 15 });
-  const practiceConceptId = studyPlan.activities[0]?.conceptId ?? 'parliament-government';
-  const practiceQuestion = QUESTIONS.find(q => q.conceptId === practiceConceptId) ?? QUESTIONS[0];
-  const criticalWeakConcepts = conceptSignals.filter(c => c.importance >= 0.8 && c.effectiveMastery < 0.7).length;
-  const passReady = canUnlockPassReady({ readiness, mocksPassed, criticalWeakConcepts });
-  const maintenance = maintenanceMode({ daysUntilExam: isoDaysUntil(examDate), concepts: conceptSignals });
+  const localDomainScores = Object.fromEntries(DOMAINS.map(domain => [domain, diagnosticSummary[domain]?.score ?? Math.round(conceptSignals.filter(c => c.domainId === domain).reduce((sum, c) => sum + c.effectiveMastery, 0) / Math.max(1, conceptSignals.filter(c => c.domainId === domain).length) * 100)])) as Record<DomainId, number>;
+  const localStudyPlan = buildStudyPlan({ concepts: conceptSignals, availableMinutes: 15 });
+  const studyPlan = remoteDashboard?.studyPlan ?? localStudyPlan;
+  const practiceConceptId = remoteLearning?.activity?.conceptId ?? studyPlan.activities[0]?.conceptId ?? 'parliament-government';
+  const practiceQuestion = remoteLearning?.question?.id ? QUESTIONS.find(q => q.id === remoteLearning.question.id) ?? QUESTIONS.find(q => q.conceptId === practiceConceptId) ?? QUESTIONS[0] : QUESTIONS.find(q => q.conceptId === practiceConceptId) ?? QUESTIONS[0];
+  const localCriticalWeakConcepts = conceptSignals.filter(c => c.importance >= 0.8 && c.effectiveMastery < 0.7).length;
+  const localPassReady = canUnlockPassReady({ readiness: localReadiness, mocksPassed: localMocksPassed, criticalWeakConcepts: localCriticalWeakConcepts });
+  const localMaintenance = maintenanceMode({ daysUntilExam: isoDaysUntil(examDate), concepts: conceptSignals });
+
+  const readinessScore = remoteDashboard?.readiness?.scorePercent ?? Math.round(localReadiness.score * 100);
+  const readinessConfidence = remoteDashboard?.readiness?.confidence ?? localReadiness.confidence;
+  const readinessStatus = scoreStatus(readinessScore / 100, readinessConfidence);
+  const domainScores = (remoteDashboard?.domainScores ?? localDomainScores) as Record<DomainId, number>;
+  const mocksPassed = remoteDashboard?.mocksPassed ?? localMocksPassed;
+  const criticalWeakConcepts = remoteDashboard?.criticalWeakConcepts ?? localCriticalWeakConcepts;
+  const passReady = remoteDashboard?.passReady ?? localPassReady;
+  const maintenance = remoteDashboard?.maintenance ?? localMaintenance;
 
   function updateFromQuestion(question: Question, optionId: string | null, responseQuality = 1) {
     const correct = optionId === question.correctOptionId;
-    setMasteries(prev => ({ ...prev, [question.conceptId]: updateMastery(prev[question.conceptId], {
-      correct,
-      difficulty: question.difficulty,
-      variantId: question.variantId,
-      isUnseenVariant: !prev[question.conceptId].variantIds.includes(question.variantId),
-      responseQuality,
-      at: new Date().toISOString()
-    }) }));
+    setMasteries(prev => {
+      const previous = prev[question.conceptId] ?? createMasteryState({ conceptId: question.conceptId });
+      return { ...prev, [question.conceptId]: updateMastery(previous, {
+        correct,
+        difficulty: question.difficulty,
+        variantId: question.variantId,
+        isUnseenVariant: !previous.variantIds.includes(question.variantId),
+        responseQuality,
+        at: new Date().toISOString()
+      }) };
+    });
     return correct;
+  }
+
+  function syncRemoteAttempt(question: Question, optionId: string | null, sessionType: 'diagnostic' | 'practice' | 'mock') {
+    if (!api.enabled || !learnerId || visualDemo) return;
+    api.recordAttempt({ learnerId, questionId: question.id, optionId, sessionType })
+      .then(() => refreshRemote(learnerId))
+      .catch(() => setBackendState('error'));
   }
 
   function submitDiagnosticAnswer(optionId: string | null) {
     const correct = updateFromQuestion(diagnosticQuestion, optionId);
     const nextAnswers = [...diagnosticAnswers, { conceptId: diagnosticQuestion.conceptId, questionId: diagnosticQuestion.id, optionId, correct }];
     setDiagnosticAnswers(nextAnswers);
+    syncRemoteAttempt(diagnosticQuestion, optionId, 'diagnostic');
     const nextDomains = new Set(nextAnswers.map(a => CONCEPTS.find(c => c.id === a.conceptId)?.domainId).filter(Boolean));
     const nextImportant = new Set(nextAnswers.map(a => a.conceptId));
     return shouldCompleteDiagnostic({
@@ -209,13 +304,19 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
       minimumQuestions: 20,
       maximumQuestions: 24,
       domainCoverage: nextDomains.size / DOMAINS.length,
-      importantConceptCoverage: important.filter(c => nextImportant.has(c.id)).length / important.length
+      importantConceptCoverage: important.filter(c => nextImportant.has(c.id)).length / Math.max(1, important.length)
     });
   }
 
   function resetDiagnostic() {
     setDiagnosticAnswers([]);
     setMasteries(Object.fromEntries(CONCEPTS.map(c => [c.id, createMasteryState({ conceptId: c.id })])));
+    setRemoteDashboard(null);
+    setRemoteDiagnostic(null);
+    setRemoteLearning(null);
+    if (api.enabled && !visualDemo) {
+      createRemoteLearner().catch(() => setBackendState('error'));
+    }
   }
 
   function answerPractice(optionId: string) {
@@ -224,14 +325,19 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
     const remediation = remediationForAttempt({ correct, misconceptionCode: correct ? null : practiceQuestion.misconceptionCode, retention: signal.retention });
     setLastAttempt({ correct, remediation, question: practiceQuestion });
     setSessionActivities(prev => [...prev, { conceptId: practiceQuestion.conceptId, minutes: 3 }]);
+    syncRemoteAttempt(practiceQuestion, optionId, 'practice');
   }
 
-  const sessionSummaryRaw = completeLearningSession({ activities: sessionActivities, readinessBefore: null, readinessAfter: readiness.score });
+  const sessionSummaryRaw = completeLearningSession({ activities: sessionActivities, readinessBefore: null, readinessAfter: readinessScore / 100 });
   const sessionSummary = { minutes: sessionSummaryRaw.minutes, conceptsStrengthened: sessionSummaryRaw.conceptsStrengthened, readinessDelta: sessionSummaryRaw.readinessDelta };
 
   function startMock() {
-    setMock(createMock({ questionPool: QUESTIONS, seed: 42 + mocksPassed }));
+    setMock(createMock({ questionPool: QUESTIONS, seed: 42 + localMocksPassed }));
     setMockIndex(0);
+    setRemoteMockId(null);
+    if (api.enabled && learnerId && !visualDemo) {
+      api.startMock(learnerId).then(remote => setRemoteMockId(remote.id)).catch(() => setBackendState('error'));
+    }
   }
 
   function answerMock(optionId: string) {
@@ -239,6 +345,9 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
     const question = mock.questions[mockIndex];
     const next = recordMockAnswer(mock, { questionId: question.id, optionId });
     setMock(next);
+    if (remoteMockId && api.enabled && !visualDemo) {
+      api.answerMock(remoteMockId, question.id, optionId).catch(() => setBackendState('error'));
+    }
     if (mockIndex < 23) setMockIndex(i => i + 1);
   }
 
@@ -246,25 +355,37 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
     if (!mock) return null;
     const result = completeMock(mock);
     setLastMockResult(result);
-    if (result.passed) setMocksPassed(v => v + 1);
+    if (result.passed) setLocalMocksPassed(v => v + 1);
     for (const graded of result.gradedAnswers) {
       const question = QUESTIONS.find(q => q.id === graded.questionId);
       if (question) updateFromQuestion(question, graded.optionId, 0.8);
     }
     setMock(result);
+    if (remoteMockId && api.enabled && learnerId && !visualDemo) {
+      api.finishMock(remoteMockId).then(remote => {
+        setRemoteDashboard(remote.dashboard);
+        return refreshRemote(learnerId);
+      }).catch(() => setBackendState('error'));
+    }
     return result;
   }
 
   function saveExamOutcome(result: 'passed' | 'failed' | 'rescheduled', consent = false, feedback: Record<string, boolean> = {}) {
     setExamOutcome(recordExamOutcome({ result, consentToCalibration: consent, feedback }));
+    if (api.enabled && learnerId && !visualDemo) {
+      api.saveOutcome({ learnerId, result, consentToCalibration: consent, feedback }).catch(() => setBackendState('error'));
+    }
   }
 
   const value: Runtime = {
     examDate, explanationLanguage, preparation, setExamDate, setExplanationLanguage, setPreparation,
-    daysUntilExam: isoDaysUntil(examDate), visualDemo: isVisualCapture(),
-    diagnosticQuestion, diagnosticAnswered: diagnosticAnswers.length, diagnosticTarget: 24, submitDiagnosticAnswer, resetDiagnostic,
+    daysUntilExam: isoDaysUntil(examDate), visualDemo, backendState, learnerId,
+    diagnosticQuestion,
+    diagnosticAnswered: remoteDiagnostic?.answered ?? remoteDashboard?.diagnosticAnswered ?? diagnosticAnswers.length,
+    diagnosticTarget: remoteDiagnostic?.target ?? 24,
+    submitDiagnosticAnswer, resetDiagnostic,
     domainScores,
-    readinessScore: Math.round(readiness.score * 100), readinessConfidence: readiness.confidence, readinessStatus: scoreStatus(readiness.score, readiness.confidence),
+    readinessScore, readinessConfidence, readinessStatus,
     studyPlan,
     conceptById: (id) => CONCEPTS.find(c => c.id === id),
     practiceQuestion, lastAttempt, answerPractice, sessionSummary,
