@@ -1,4 +1,4 @@
-import { validateFactPublishability, validateQuestionProvenance } from './knowledge.mjs';
+import { canPublishFact, validateQuestionProvenance } from './knowledge.mjs';
 
 export function diffSourceVersion(previous, current) {
   const changed = previous.contentHash !== current.contentHash;
@@ -22,14 +22,11 @@ export function impactAnalysis({ changedFactIds = [], questions = [] }) {
   };
 }
 
-export function reviewFact({ fact, evidence, reviewerId, decision, reviewedAt = new Date().toISOString() }) {
+export function reviewFact({ fact, reviewerId, decision, reviewedAt = new Date().toISOString() }) {
   if (!['approve', 'reject'].includes(decision)) throw new Error('invalid review decision');
 
-  if (decision === 'approve') {
-    const validation = validateFactPublishability({ fact, evidence });
-    if (!validation.ok) {
-      return { status: 'blocked', reasons: validation.reasons, reviewerId, reviewedAt };
-    }
+  if (decision === 'approve' && !canPublishFact(fact)) {
+    return { status: 'blocked', reasons: ['fact_not_publishable'], reviewerId, reviewedAt };
   }
 
   return {
@@ -39,13 +36,14 @@ export function reviewFact({ fact, evidence, reviewerId, decision, reviewedAt = 
   };
 }
 
-export function reviewQuestion({ question, concept, fact, evidence, reviewerId, decision, reviewedAt = new Date().toISOString() }) {
+export function reviewQuestion({ question, facts, reviewerId, decision, reviewedAt = new Date().toISOString() }) {
   if (!['approve', 'reject'].includes(decision)) throw new Error('invalid review decision');
 
   if (decision === 'approve') {
-    const validation = validateQuestionProvenance({ question, concept, fact, evidence });
+    const factsById = new Map((facts ?? []).map((fact) => [fact.id, fact]));
+    const validation = validateQuestionProvenance({ question, factsById });
     if (!validation.ok) {
-      return { status: 'blocked', reasons: validation.reasons, reviewerId, reviewedAt };
+      return { status: 'blocked', reasons: [validation.reason], reviewerId, reviewedAt };
     }
   }
 
