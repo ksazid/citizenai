@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const model = fs.readFileSync(new URL('../../apps/mobile/src/model.ts', import.meta.url), 'utf8');
 const screens = fs.readFileSync(new URL('../../apps/mobile/src/screens.tsx', import.meta.url), 'utf8');
 const theme = fs.readFileSync(new URL('../../apps/mobile/src/theme.ts', import.meta.url), 'utf8');
+const components = fs.readFileSync(new URL('../../apps/mobile/src/components.tsx', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../../apps/mobile/App.tsx', import.meta.url), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(new URL('../../apps/mobile/package.json', import.meta.url), 'utf8'));
 
@@ -19,8 +20,8 @@ const expected = [
 
 test('mobile UI keeps the frozen 28-screen inventory', () => {
   for (const id of expected) {
-    assert.match(model, new RegExp(`['\"]${id}['\"]`));
-    assert.match(screens, new RegExp(`['\"]?${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['\"]?\\s*:`));
+    assert.match(model, new RegExp(`['\\"]${id}['\\"]`));
+    assert.match(screens, new RegExp(`['\\"]?${id.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}['\\"]?\\s*:`));
   }
   assert.equal(expected.length, 28);
 });
@@ -31,10 +32,21 @@ test('navigation exposes only the frozen four primary tabs', () => {
 });
 
 test('approved UI DNA remains encoded in mobile tokens', () => {
-  assert.match(theme, /background: '#F7F8FC'/);
-  assert.match(theme, /primary: '#3157D5'/);
-  assert.match(theme, /success: '#16835B'/);
+  assert.match(theme, /background: '#FBFCFF'/);
+  assert.match(theme, /text: '#071B57'/);
+  assert.match(theme, /primary: '#1F5BE8'/);
+  assert.match(theme, /teal: '#16A3A1'/);
   assert.match(theme, /Pass Ready/);
+});
+
+test('approved five visual anchors are explicitly represented', () => {
+  for (const anchor of ['Get ready to pass', 'You’re Building', 'Your readiness', 'Parliament vs Government', 'Pass Ready']) {
+    assert.match(screens, new RegExp(anchor));
+  }
+  assert.match(components, /ProgressRing/);
+  assert.match(components, /shield-crown-outline/);
+  assert.match(components, /BottomTabs/);
+  assert.match(components, /IconTile/);
 });
 
 test('mobile app is interactive rather than a static mockup', () => {
@@ -48,4 +60,6 @@ test('mobile scaffold targets stable Expo SDK 57', () => {
   assert.equal(pkg.dependencies.expo, '~57.0.0');
   assert.equal(pkg.dependencies.react, '19.2.3');
   assert.equal(pkg.dependencies['react-native'], '0.86.0');
+  assert.ok(pkg.dependencies['@expo/vector-icons']);
+  assert.ok(pkg.dependencies['react-native-svg']);
 });

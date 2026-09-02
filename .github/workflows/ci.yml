@@ -32,3 +32,46 @@ jobs:
           cache-dependency-path: apps/mobile/package.json
       - run: npm install --no-audit --no-fund
       - run: npx tsc --noEmit
+
+  visual-anchor-capture:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/mobile/package.json
+      - run: npm install --no-audit --no-fund
+      - run: npx expo export --platform web --output-dir dist
+      - name: Capture approved visual anchors
+        run: |
+          mkdir -p screenshots
+          python3 -m http.server 4173 --directory dist >/tmp/citizenai-web.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 3
+          for SCREEN in welcome diagnostic-result home compare-concepts pass-ready; do
+            google-chrome --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=430,932 --screenshot="screenshots/${SCREEN}.png" "http://127.0.0.1:4173/?screen=${SCREEN}"
+          done
+          test -s screenshots/welcome.png
+          test -s screenshots/diagnostic-result.png
+          test -s screenshots/home.png
+          test -s screenshots/compare-concepts.png
+          test -s screenshots/pass-ready.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-approved-anchor-screenshots
+          path: apps/mobile/screenshots/*.png
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-ui-source-snapshot
+          path: |
+            apps/mobile/src/components.tsx
+            apps/mobile/src/screens.tsx
+            apps/mobile/src/theme.ts
+          if-no-files-found: error
