@@ -164,7 +164,8 @@ export function ListRow({ title, meta, onPress, trailing, icon, iconLibrary = 'i
   </Pressable>;
 }
 
-export function BottomTabs({ active, navigate }: { active: TabId; navigate: (screen: ScreenId) => void }) {
+export function BottomTabs({ active, navigate, persistent = false }: { active: TabId; navigate: (screen: ScreenId) => void; persistent?: boolean }) {
+  if (!persistent) return null;
   const tabs: { id: TabId; label: string; icon: string }[] = [
     { id: 'home', label: 'Home', icon: 'home' },
     { id: 'learn', label: 'Learn', icon: 'book-outline' },
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
   button: { minHeight: 56, borderRadius: 18, backgroundColor: theme.color.primaryDark, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 12, paddingHorizontal: 22, marginTop: 14, ...theme.shadow.soft },
   buttonSecondary: { backgroundColor: theme.color.glassStrong, borderWidth: 1, borderColor: theme.color.borderStrong },
   buttonDisabled: { opacity: 0.42 },
-  buttonText: { color: theme.color.white, fontSize: 17, lineHeight: 22, fontWeight: '650' },
+  buttonText: { color: theme.color.white, fontSize: 17, lineHeight: 22, fontWeight: '600' },
   buttonSecondaryText: { color: theme.color.primaryDark },
   textAction: { minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
   textActionText: { color: theme.color.primary, fontWeight: '600', fontSize: 16 },
@@ -245,15 +246,15 @@ const styles = StyleSheet.create({
   metricValue: { color: theme.color.text, fontSize: 23, fontWeight: '700' },
   metricLabel: { color: theme.color.textMuted, fontSize: 12, marginTop: 3 },
   micro: { color: theme.color.textMuted, fontSize: 11, marginTop: 2 },
-  summaryMetric: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  summaryMetric: { flex: 1, minWidth: 92, alignItems: 'center', paddingHorizontal: 8 },
   summaryLabel: { minHeight: 38, textAlign: 'center', color: theme.color.text, fontSize: 13, lineHeight: 18, marginTop: 10 },
   summaryValue: { fontSize: 29, lineHeight: 35, fontWeight: '600', marginTop: 4 },
   listRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.color.border, borderRadius: 12 },
   listRowPressed: { backgroundColor: theme.color.primaryPale },
-  listTitle: { color: theme.color.text, fontSize: 16, lineHeight: 21, fontWeight: '650' },
+  listTitle: { color: theme.color.text, fontSize: 16, lineHeight: 21, fontWeight: '600' },
   listMeta: { color: theme.color.textMuted, fontSize: 13, lineHeight: 18, marginTop: 4 },
   trailing: { color: theme.color.textMuted, fontSize: 14, fontWeight: '600' },
-  tabs: { flexDirection: 'row', borderRadius: 30, paddingVertical: 7, paddingHorizontal: 7, marginHorizontal: 0, marginTop: 24, marginBottom: 2, ...theme.shadow.floating },
+  tabs: { flexDirection: 'row', borderRadius: 30, paddingVertical: 7, paddingHorizontal: 7, ...theme.shadow.floating },
   tab: { flex: 1, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 4, paddingVertical: 5, borderRadius: 22 },
   tabSelected: { backgroundColor: theme.color.glassStrong, ...theme.shadow.soft },
   tabText: { fontSize: 11, lineHeight: 14, fontWeight: '500', color: theme.color.navInactive },
