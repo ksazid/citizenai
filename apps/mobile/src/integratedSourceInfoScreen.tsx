@@ -38,8 +38,8 @@ export const integratedSourceInfoScreen: ScreenMap = { 'source-info': SourceInfo
 
 const s = StyleSheet.create({
   screen: { flex: 1, gap: 14 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  title: { color: theme.color.text, fontSize: 20, lineHeight: 26, fontWeight: '700', flex: 1 },
-  copy: { color: theme.color.textMuted, fontSize: 14, lineHeight: 21, marginTop: 7 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  title: { color: theme.color.text, fontSize: 20, lineHeight: 26, fontWeight: '700', flex: 1, minWidth: 180 },
+  copy: { color: theme.color.textMuted, fontSize: 15, lineHeight: 22, marginTop: 7 },
   warningTitle: { color: theme.color.text, fontSize: 17, lineHeight: 23, fontWeight: '700' }
 });
