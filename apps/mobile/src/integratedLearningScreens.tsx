@@ -45,7 +45,7 @@ const s = StyleSheet.create({
   screen: { flex: 1, gap: 12 },
   progress: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   progressBar: { flex: 1, minWidth: 150 },
-  progressText: { color: theme.color.text, fontSize: 14, lineHeight: 19, fontWeight: '650' },
+  progressText: { color: theme.color.text, fontSize: 14, lineHeight: 19, fontWeight: '600' },
   subtitle: { color: theme.color.textMuted, fontSize: 16, lineHeight: 23 },
   lessonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start', paddingVertical: 12 },
   lessonCopy: { flex: 1, minWidth: 180 },
