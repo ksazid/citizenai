@@ -47,6 +47,9 @@ const learnerIds = [];
 let restoredDashboardSeen = false;
 let learnerId = null;
 
+page.on('console', message => console.log(`[browser:${message.type()}] ${message.text()}`));
+page.on('pageerror', error => console.error(`[browser:pageerror] ${error.stack ?? error.message}`));
+
 page.on('response', async (response) => {
   try {
     const request = response.request();
@@ -62,27 +65,31 @@ page.on('response', async (response) => {
   }
 });
 
+const bodyText = () => page.locator('body').innerText().catch(() => '');
+const bodyIncludes = async (text) => (await bodyText()).includes(text);
+const bodyMatches = async (pattern) => pattern.test(await bodyText());
+
 try {
   await page.goto(webUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await page.getByText('Get ready to pass', { exact: true }).waitFor({ timeout: 30_000 });
+  await waitUntil(() => bodyIncludes('Get ready to pass'), { timeoutMs: 30_000, message: 'Welcome screen did not render' });
 
   await waitUntil(() => learnerIds.length >= 1, { timeoutMs: 60_000, message: 'initial mobile learner was not created' });
 
   await page.getByRole('button', { name: 'Get started' }).click();
-  await page.getByText('Tell us about your test', { exact: true }).waitFor();
+  await waitUntil(() => bodyIncludes('Tell us about your test'), { timeoutMs: 15_000, message: 'test setup screen did not render' });
 
   const learnerCountBeforeReset = learnerIds.length;
   await page.getByRole('button', { name: 'Check my readiness' }).click();
-  await page.getByText(/Diagnostic ·/).waitFor({ timeout: 30_000 });
+  await waitUntil(() => bodyIncludes('Diagnostic ·'), { timeoutMs: 30_000, message: 'diagnostic screen did not render' });
 
   await waitUntil(() => learnerIds.length > learnerCountBeforeReset, { timeoutMs: 60_000, message: 'diagnostic reset did not create a persisted staging learner' });
   learnerId = learnerIds.at(-1);
   assert.ok(learnerId, 'missing diagnostic learner id');
 
+  const resultPattern = /You’re (Not Ready|Building|Nearly Ready|Pass Ready|Strongly Ready|More evidence needed)/;
   let diagnosticCompleted = false;
   for (let answer = 0; answer < 24; answer += 1) {
-    const resultTitle = page.getByText(/You’re (Not Ready|Building|Nearly Ready|Pass Ready|Strongly Ready|More evidence needed)/).first();
-    if (await resultTitle.isVisible().catch(() => false)) {
+    if (await bodyMatches(resultPattern)) {
       diagnosticCompleted = true;
       break;
     }
@@ -94,7 +101,7 @@ try {
   }
 
   if (!diagnosticCompleted) {
-    await page.getByText(/You’re (Not Ready|Building|Nearly Ready|Pass Ready|Strongly Ready|More evidence needed)/).first().waitFor({ timeout: 30_000 });
+    await waitUntil(() => bodyMatches(resultPattern), { timeoutMs: 30_000, message: 'diagnostic result did not render after 24 answers' });
   }
 
   await waitUntil(async () => {
@@ -107,31 +114,23 @@ try {
   assert.ok(dashboardAfterDiagnostic.studyPlan?.activities?.length > 0, 'server did not return a study plan');
 
   await page.getByRole('button', { name: 'Start my plan' }).click();
-  await page.getByText('Today’s plan', { exact: true }).waitFor({ timeout: 15_000 });
-  await page.getByText(/Chosen by the study engine/).waitFor();
+  await waitUntil(() => bodyIncludes('Today’s plan'), { timeoutMs: 15_000, message: 'Today plan screen did not render' });
+  await waitUntil(() => bodyIncludes('Chosen by the study engine'), { timeoutMs: 15_000, message: 'server-backed study plan copy missing' });
   await page.getByRole('button', { name: 'Start plan' }).click();
 
   await waitUntil(async () => {
-    const candidates = [
-      page.getByText(/Today’s plan · Learn/),
-      page.getByText(/Today’s plan · Compare/),
-      page.getByText(/Recall ·/),
-      page.getByRole('button', { name: 'Check answer' })
-    ];
-    for (const candidate of candidates) {
-      if (await candidate.first().isVisible().catch(() => false)) return true;
-    }
-    return false;
+    const text = await bodyText();
+    return text.includes('Today’s plan · Learn') || text.includes('Today’s plan · Compare') || text.includes('Recall ·') || text.includes('Check answer');
   }, { timeoutMs: 15_000, message: 'study plan did not open a learning activity' });
 
   restoredDashboardSeen = false;
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
-  await page.getByText('Get ready to pass', { exact: true }).waitFor({ timeout: 30_000 });
+  await waitUntil(() => bodyIncludes('Get ready to pass'), { timeoutMs: 30_000, message: 'Welcome screen did not render after restart' });
   await waitUntil(() => restoredDashboardSeen, { timeoutMs: 60_000, message: 'app restart did not restore the same learner from AsyncStorage' });
 
   await page.getByRole('button', { name: 'I already have an account' }).click();
-  await page.getByText('Your readiness', { exact: true }).waitFor({ timeout: 15_000 });
-  await page.getByText('Today’s plan', { exact: true }).waitFor();
+  await waitUntil(() => bodyIncludes('Your readiness'), { timeoutMs: 15_000, message: 'Home readiness did not render after restart' });
+  await waitUntil(() => bodyIncludes('Today’s plan'), { timeoutMs: 15_000, message: 'Home study plan did not render after restart' });
 
   const dashboardAfterRestart = await jsonRequest(`/v1/dashboard?learnerId=${encodeURIComponent(learnerId)}`);
   assert.equal(dashboardAfterRestart.diagnosticAnswered, dashboardAfterDiagnostic.diagnosticAnswered, 'diagnostic evidence changed across restart');
@@ -149,6 +148,9 @@ try {
     studyActivities: dashboardAfterRestart.studyPlan.activities.length,
     restoredSameLearnerAfterReload: true
   }, null, 2));
+} catch (error) {
+  console.error('[mobile-staging-e2e] body text:', await bodyText());
+  throw error;
 } finally {
   await browser.close();
 }
