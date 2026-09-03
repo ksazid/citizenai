@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { BottomTabs } from './src/components';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
@@ -31,11 +32,11 @@ function tabForScreen(screen: ScreenId): TabId | null {
 
 function MobileApp() {
   const captureScreen = requestedScreen();
+  const insets = useSafeAreaInsets();
   const [history, setHistory] = useState<ScreenId[]>([captureScreen ?? 'welcome']);
   const current = history[history.length - 1];
   const activeTab = tabForScreen(current);
   const Screen = useMemo(() => {
-    // Visual capture now exercises the same integrated screen hierarchy users see.
     return integratedWelcomeScreen[current]
       ?? integratedCoreScreens[current]
       ?? integratedLearningScreens[current]
@@ -47,16 +48,18 @@ function MobileApp() {
 
   const navigate = (screen: ScreenId) => setHistory(prev => [...prev, screen]);
   const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
+  const tabBottom = Math.max(insets.bottom + 2, 10);
+  const tabContentPadding = 108 + insets.bottom;
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.color.background} />
       <View style={styles.frame}>
         <View pointerEvents="none" style={styles.auraTop} />
         <View pointerEvents="none" style={styles.auraSide} />
         <ScrollView
           style={styles.scroll}
-          contentContainerStyle={[styles.content, activeTab && styles.contentWithTabs]}
+          contentContainerStyle={[styles.content, activeTab && { paddingBottom: tabContentPadding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           contentInsetAdjustmentBehavior="automatic"
@@ -64,14 +67,22 @@ function MobileApp() {
         >
           <Screen navigate={navigate} goBack={goBack} />
         </ScrollView>
-        {activeTab ? <View pointerEvents="box-none" style={styles.tabOverlay}><BottomTabs persistent active={activeTab} navigate={navigate} /></View> : null}
+        {activeTab ? (
+          <View pointerEvents="box-none" style={[styles.tabOverlay, { bottom: tabBottom }]}>
+            <BottomTabs persistent active={activeTab} navigate={navigate} />
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
 }
 
 export default function App() {
-  return <CitizenAIRuntimeProvider><MobileApp /></CitizenAIRuntimeProvider>;
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+      <CitizenAIRuntimeProvider><MobileApp /></CitizenAIRuntimeProvider>
+    </SafeAreaProvider>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -81,6 +92,5 @@ const styles = StyleSheet.create({
   auraSide: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: 290, right: -245, backgroundColor: 'rgba(22,163,161,0.055)' },
   scroll: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 22 },
-  contentWithTabs: { paddingBottom: 108 },
-  tabOverlay: { position: 'absolute', left: 20, right: 20, bottom: 10 }
+  tabOverlay: { position: 'absolute', left: 20, right: 20 }
 });
