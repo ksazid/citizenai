@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "staging": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CITIZENAI_API_URL": "https://citizenai-api-staging.onrender.com"
+      }
+    },
+    "production": {}
+  }
+}
