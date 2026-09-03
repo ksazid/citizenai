@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Record real staging walkthrough
+      - name: Capture real staging walkthrough states
         env:
           CITIZENAI_MOBILE_WEB_URL: http://127.0.0.1:4173
           CITIZENAI_STAGING_API_URL: https://citizenai-api-staging.onrender.com
@@ -46,12 +46,31 @@ jobs:
           trap 'kill $SERVER_PID || true' EXIT
           sleep 3
           node scripts/record-demo-video.mjs
-          mkdir -p .artifacts/demo-video
+
+      - name: Build portrait MP4 walkthrough
+        run: |
+          python3 - <<'PY'
+          import json, os, shutil
+          with open('.artifacts/demo-video/timeline.json', encoding='utf-8') as f:
+              timeline = json.load(f)
+          fps = int(timeline.get('fps', 8))
+          frame_dir = '.artifacts/demo-video/frames'
+          os.makedirs(frame_dir, exist_ok=True)
+          frame = 0
+          for shot in timeline['shots']:
+              copies = max(1, round(float(shot['durationSeconds']) * fps))
+              for _ in range(copies):
+                  target = os.path.join(frame_dir, f'frame-{frame:06d}.jpg')
+                  shutil.copyfile(shot['filePath'], target)
+                  frame += 1
+          print(f'Built {frame} frames at {fps} fps ({frame / fps:.2f}s)')
+          PY
           ffmpeg -y -framerate 8 -i '.artifacts/demo-video/frames/frame-%06d.jpg' \
             -vf 'scale=430:932:flags=lanczos,format=yuv420p' \
-            -c:v libx264 -preset medium -crf 20 -movflags +faststart \
+            -c:v libx264 -preset medium -crf 19 -movflags +faststart \
             .artifacts/demo-video/citizenai-staging-walkthrough.mp4
           test -s .artifacts/demo-video/citizenai-staging-walkthrough.mp4
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 .artifacts/demo-video/citizenai-staging-walkthrough.mp4
 
       - name: Upload CitizenAI walkthrough
         uses: actions/upload-artifact@v4
