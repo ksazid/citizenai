@@ -1,10 +1,12 @@
 // Installs the independently authored, provenance-verified and human-certified
 // active UK knowledge pack into the existing engine-backed runtime.
+// The mobile bundle imports the data-only module so Node-only certification/hash
+// tooling stays on the server and in CI.
 // @ts-ignore - production domain pack is an ESM module outside the mobile TS project.
-import { UK_ACTIVE_PACK, UK_ACTIVE_PACK_MANIFEST, validateUkActivePack } from '../../../src/citizenai/uk-active-pack.mjs';
+import { UK_ACTIVE_PACK, UK_ACTIVE_PACK_MANIFEST, validateUkActivePackData } from '../../../src/citizenai/uk-active-pack-data.mjs';
 import { CONCEPTS, QUESTIONS, Concept, Question } from './runtime';
 
-const validation = validateUkActivePack();
+const validation = validateUkActivePackData();
 if (!validation.ok) throw new Error(`UK active knowledge pack failed validation: ${validation.errors.join(', ')}`);
 
 const concepts: Concept[] = UK_ACTIVE_PACK.concepts.map((concept: any) => ({
