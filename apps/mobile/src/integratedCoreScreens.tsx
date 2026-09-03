@@ -25,11 +25,11 @@ function TestSetup({ navigate, goBack }: Props) {
     <Text style={typography.h1}>Tell us about your test</Text>
     <Text style={s.intro}>Three details are enough to build your first readiness check.</Text>
     <Text style={s.sectionTitle}>Test date</Text>
-    <Card><Text style={s.label}>Exam date</Text><TextInput value={rt.examDate} onChangeText={rt.setExamDate} style={s.input} /><Text style={s.hint}>{rt.daysUntilExam} days from today</Text></Card>
+    <Card><Text style={s.label}>Exam date</Text><TextInput accessibilityLabel="Exam date" value={rt.examDate} onChangeText={rt.setExamDate} style={s.input} /><Text style={s.hint}>{rt.daysUntilExam} days from today</Text></Card>
     <Text style={s.sectionTitle}>Explanation language</Text>
-    <Card><Pressable onPress={() => rt.setExplanationLanguage(rt.explanationLanguage === 'English' ? 'Simple English' : 'English')}><ListRow title={rt.explanationLanguage} meta="Tap to change" trailing="Selected" icon="language-outline" /></Pressable></Card>
+    <Card><ListRow title={rt.explanationLanguage} meta="Tap to change" trailing="Selected" icon="language-outline" onPress={() => rt.setExplanationLanguage(rt.explanationLanguage === 'English' ? 'Simple English' : 'English')} hideDivider /></Card>
     <Text style={s.sectionTitle}>Previous preparation</Text>
-    <Card><View style={s.segment}>{['None', 'Some', 'A lot'].map(v => <Pressable key={v} style={[s.segmentItem, rt.preparation === v && s.segmentSelected]} onPress={() => rt.setPreparation(v)}><Text style={[s.segmentText, rt.preparation === v && s.segmentTextSelected]}>{v}</Text></Pressable>)}</View></Card>
+    <Card><View accessibilityRole="radiogroup" style={s.segment}>{['None', 'Some', 'A lot'].map(v => <Pressable accessibilityRole="radio" accessibilityState={{ selected: rt.preparation === v }} accessibilityLabel={`${v} previous preparation`} key={v} style={({ pressed }) => [s.segmentItem, rt.preparation === v && s.segmentSelected, pressed && s.optionPressed]} onPress={() => rt.setPreparation(v)}><Text style={[s.segmentText, rt.preparation === v && s.segmentTextSelected]}>{v}</Text></Pressable>)}</View></Card>
     <Button label="Check my readiness" onPress={() => { rt.resetDiagnostic(); navigate('diagnostic'); }} />
   </View>;
 }
@@ -48,9 +48,9 @@ function Diagnostic({ navigate, goBack }: Props) {
     <AppHeader onBack={goBack} days={`${rt.daysUntilExam} days until test`} />
     <View style={s.progressHead}><Text style={s.progressLabel}>Diagnostic · {rt.diagnosticAnswered + 1} of ~{rt.diagnosticTarget}</Text><ProgressBar value={rt.diagnosticAnswered} max={rt.diagnosticTarget} /></View>
     <Pill label={rt.conceptById(q.conceptId)?.title ?? 'Knowledge'} />
-    <Text style={[typography.h1, { marginTop: 18 }]}>{q.stem}</Text>
+    <Text style={[typography.h1, { marginTop: 12 }]}>{q.stem}</Text>
     <Text style={s.intro}>Choose the best answer. Corrections stay hidden until the diagnostic is complete.</Text>
-    <View style={s.options}>{q.options.map(option => <Pressable key={option.id} onPress={() => setSelected(option.id)} style={[s.option, selected === option.id && s.optionSelected]}><View style={[s.radio, selected === option.id && s.radioSelected]} /> <Text style={s.optionText}>{option.text}</Text></Pressable>)}</View>
+    <View accessibilityRole="radiogroup" style={s.options}>{q.options.map(option => <Pressable accessibilityRole="radio" accessibilityState={{ selected: selected === option.id }} accessibilityLabel={option.text} key={option.id} onPress={() => setSelected(option.id)} style={({ pressed }) => [s.option, selected === option.id && s.optionSelected, pressed && s.optionPressed]}><View style={[s.radio, selected === option.id && s.radioSelected]} /><Text style={s.optionText}>{option.text}</Text></Pressable>)}</View>
     <TextAction label="I don’t know" onPress={() => setSelected('__unknown__')} />
     <Button label={rt.diagnosticAnswered >= 19 ? 'Finish readiness check' : 'Next question'} disabled={!selected} onPress={submit} />
   </View>;
@@ -64,7 +64,7 @@ function DiagnosticResult({ navigate, goBack }: Props) {
   const scores: Record<DomainId, number> = visual ? { government: 41, history: 48, rights: 72, culture: 87 } : rt.domainScores;
   return <View style={s.screen}>
     <AppHeader onBack={goBack} days={`${rt.daysUntilExam} days until test`} />
-    <View style={s.resultHero}><View style={{ flex: 1 }}><Text style={s.resultTitle}>You’re {status}</Text><Text style={s.resultCopy}>{status === 'More evidence needed' ? 'We need a little more evidence before giving you a confident readiness label.' : 'CitizenAI has measured your current strengths and the highest-value gaps to work on next.'}</Text></View><ProgressRing score={score} label="Readiness Score" size={140} stroke={7} /></View>
+    <View style={s.resultHero}><View style={s.resultCopyWrap}><Text style={s.resultTitle}>You’re {status}</Text><Text style={s.resultCopy}>{status === 'More evidence needed' ? 'We need a little more evidence before giving you a confident readiness label.' : 'CitizenAI has measured your current strengths and the highest-value gaps to work on next.'}</Text></View><ProgressRing score={score} label="Readiness" size={140} stroke={8} /></View>
     <Card style={s.anchorCard}><Text style={s.cardTitle}>Domain breakdown</Text>{domainMeta.map(d => <View key={d.id} style={s.domainRow}><IconTile name={d.icon} tone={d.teal ? 'teal' : 'blue'} size={40} iconSize={21} /><View style={{ flex: 1 }}><Text style={s.domainName}>{d.name}</Text><ProgressBar value={scores[d.id]} teal={d.teal} /></View><Text style={s.domainScore}>{scores[d.id]}%</Text><AppIcon name="chevron-forward" size={18} color={theme.color.textSoft} /></View>)}</Card>
     <Card style={s.anchorCard}><View style={s.rowBetween}><Text style={s.cardTitle}>Today’s plan</Text><Text style={s.meta}>{rt.studyPlan.durationMinutes} min total</Text></View>{rt.studyPlan.activities.slice(0, 4).map((a, i) => <ListRow key={`${a.conceptId}-${i}`} title={rt.conceptById(a.conceptId)?.title ?? a.conceptId} trailing={`${a.minutes} min`} icon={activityIcon(a.type)} iconTone={i % 2 ? 'teal' : 'blue'} hideDivider={i === Math.min(rt.studyPlan.activities.length, 4) - 1} />)}</Card>
     <Button label="Start my plan" onPress={() => navigate('today-plan')} /><TextAction label="See full breakdown" onPress={() => navigate('progress-overview')} />
@@ -76,13 +76,16 @@ function Home({ navigate }: Props) {
   const visual = rt.visualDemo;
   const score = visual ? 68 : rt.readinessScore;
   const label = visual ? 'Building' : rt.readinessStatus;
+  const progressDomains = domainMeta.slice(0, 3);
   return <View style={s.screen}>
     <AppHeader days={`${rt.daysUntilExam} days until test`} />
-    <Card tone="soft" style={s.homeHero}><ProgressRing score={score} label={label} size={142} stroke={7} /><View style={s.heroCopy}><Text style={s.heroTitle}>Your readiness</Text><Text style={s.heroDelta}>{visual ? '+7% this week' : `${Math.round(rt.readinessConfidence * 100)}% coverage confidence`}</Text><View style={s.divider} /><Text style={s.heroSupport}>{label === 'More evidence needed' ? 'Keep measuring before trusting the score' : `${Math.max(0, 85 - score)}% to Pass Ready threshold`}</Text><Text style={s.heroPass}>{label === 'Pass Ready' ? 'Pass Ready' : 'Pass Ready'}</Text><ProgressBar value={score} valueLabel={`${score}%`} /></View></Card>
-    <View style={s.sectionHead}><Text style={s.sectionTitleCompact}>Today’s plan</Text><Text style={s.meta}>{rt.studyPlan.activities.length} items</Text></View>
-    <Card style={s.planCard}>{rt.studyPlan.activities.slice(0, 4).map((a, i) => <ListRow key={`${a.conceptId}-${i}`} title={rt.conceptById(a.conceptId)?.title ?? a.conceptId} trailing={`${a.minutes} min`} icon={activityIcon(a.type)} iconTone={i % 2 ? 'teal' : 'blue'} onPress={() => navigate(activityRoute(a.type))} hideDivider={i === Math.min(rt.studyPlan.activities.length, 4) - 1} />)}</Card>
-    <Button label="Continue learning" onPress={() => navigate('today-plan')} />
-    <View style={s.quickRow}><QuickAction icon="flash" tone="teal" title="Quick Practice" onPress={() => navigate('question')} /><QuickAction icon="clipboard-outline" title="Mock Test" onPress={() => navigate('mock-intro')} /><QuickAction icon="bar-chart" tone="teal" title="My Progress" onPress={() => navigate('progress-overview')} /></View>
+    <View style={s.homeIntro}><Text style={s.homeGreeting}>Your citizenship journey</Text><Text style={s.homeSub}>Focus on the next best action, not more content.</Text></View>
+    <Card style={s.homeHero}><ProgressRing score={score} label={label} size={148} stroke={8} /><View style={s.heroCopy}><Text style={s.heroTitle}>Your readiness</Text><Text style={s.heroDelta}>{visual ? '+7% this week' : `${Math.round(rt.readinessConfidence * 100)}% coverage confidence`}</Text><Text style={s.heroSupport}>{label === 'More evidence needed' ? 'Keep measuring before trusting the score.' : `${Math.max(0, 85 - score)}% to the Pass Ready threshold.`}</Text></View></Card>
+    <Button label={`Today’s plan · ${rt.studyPlan.activities.length} activities · ${rt.studyPlan.durationMinutes} min`} onPress={() => navigate('today-plan')} />
+    <View style={s.sectionHead}><Text style={s.sectionTitleCompact}>Your progress</Text><TextAction label="View all" onPress={() => navigate('progress-overview')} /></View>
+    <Card style={s.progressList}>{progressDomains.map((d, i) => <View key={d.id} style={[s.progressDomain, i === progressDomains.length - 1 && { borderBottomWidth: 0 }]}><IconTile name={d.icon} tone={d.teal ? 'teal' : 'blue'} size={38} iconSize={20} /><View style={{ flex: 1 }}><View style={s.rowBetween}><Text style={s.domainName}>{d.name}</Text><Text style={s.domainScore}>{rt.domainScores[d.id]}%</Text></View><ProgressBar value={rt.domainScores[d.id]} teal={d.teal} /></View></View>)}</Card>
+    <Text style={s.sectionTitleCompact}>Quick actions</Text>
+    <View style={s.quickRow}><QuickAction icon="book-outline" title="Study" onPress={() => navigate('today-plan')} /><QuickAction icon="flash" tone="teal" title="Practice" onPress={() => navigate('question')} /><QuickAction icon="clipboard-outline" title="Mock Test" onPress={() => navigate('mock-intro')} /><QuickAction icon="git-compare-outline" tone="teal" title="Compare" onPress={() => navigate('compare-concepts')} /></View>
     <TrustCard title="Study only what you need." subtitle="Smart practice. Focused results." />
     <BottomTabs active="home" navigate={navigate} />
   </View>;
@@ -97,7 +100,7 @@ function Question({ navigate, goBack }: Props) {
   const rt = useCitizenAI();
   const q = rt.practiceQuestion;
   const [selected, setSelected] = useState<string | null>(null);
-  return <View style={s.screen}><AppHeader onBack={goBack} days={`${rt.daysUntilExam} days until test`} /><Pill label={rt.conceptById(q.conceptId)?.title ?? 'Practice'} /><Text style={[typography.h1, { marginTop: 18 }]}>{q.stem}</Text><View style={s.options}>{q.options.map(o => <Pressable key={o.id} onPress={() => setSelected(o.id)} style={[s.option, selected === o.id && s.optionSelected]}><View style={[s.radio, selected === o.id && s.radioSelected]} /><Text style={s.optionText}>{o.text}</Text></Pressable>)}</View><Button label="Check answer" disabled={!selected} onPress={() => { if (selected) { rt.answerPractice(selected); navigate('answer-explanation'); } }} /><BottomTabs active="learn" navigate={navigate} /></View>;
+  return <View style={s.screen}><AppHeader onBack={goBack} days={`${rt.daysUntilExam} days until test`} /><Pill label={rt.conceptById(q.conceptId)?.title ?? 'Practice'} /><Text style={[typography.h1, { marginTop: 12 }]}>{q.stem}</Text><View accessibilityRole="radiogroup" style={s.options}>{q.options.map(o => <Pressable accessibilityRole="radio" accessibilityState={{ selected: selected === o.id }} accessibilityLabel={o.text} key={o.id} onPress={() => setSelected(o.id)} style={({ pressed }) => [s.option, selected === o.id && s.optionSelected, pressed && s.optionPressed]}><View style={[s.radio, selected === o.id && s.radioSelected]} /><Text style={s.optionText}>{o.text}</Text></Pressable>)}</View><Button label="Check answer" disabled={!selected} onPress={() => { if (selected) { rt.answerPractice(selected); navigate('answer-explanation'); } }} /><BottomTabs active="learn" navigate={navigate} /></View>;
 }
 
 function AnswerExplanation({ navigate, goBack }: Props) {
@@ -115,7 +118,7 @@ function SessionComplete({ navigate, goBack }: Props) {
 
 function ProgressOverview({ navigate }: Props) {
   const rt = useCitizenAI();
-  return <View style={s.screen}><AppHeader days={`${rt.daysUntilExam} days until test`} /><Text style={typography.h1}>Progress</Text><Card tone="soft" style={s.progressCard}><ProgressRing score={rt.readinessScore} label={rt.readinessStatus} size={130} stroke={7} /><View style={{ flex: 1 }}><Text style={s.heroTitle}>Coverage confidence</Text><Text style={s.bigMetric}>{Math.round(rt.readinessConfidence * 100)}%</Text><Text style={s.meta}>Readiness stays conservative until evidence is broad enough.</Text></View></Card><Text style={s.sectionTitle}>Domains</Text><Card>{domainMeta.map((d, i) => <ListRow key={d.id} title={d.name} meta={rt.domainScores[d.id] < 70 ? 'Needs attention' : 'Building strength'} trailing={`${rt.domainScores[d.id]}%`} icon={d.icon} iconTone={d.teal ? 'teal' : 'blue'} onPress={() => navigate('domain-detail')} hideDivider={i === domainMeta.length - 1} />)}</Card><BottomTabs active="progress" navigate={navigate} /></View>;
+  return <View style={s.screen}><AppHeader days={`${rt.daysUntilExam} days until test`} /><Text style={typography.h1}>Progress</Text><Card style={s.progressCard}><ProgressRing score={rt.readinessScore} label={rt.readinessStatus} size={130} stroke={7} /><View style={s.progressCopy}><Text style={s.heroTitle}>Coverage confidence</Text><Text style={s.bigMetric}>{Math.round(rt.readinessConfidence * 100)}%</Text><Text style={s.meta}>Readiness stays conservative until evidence is broad enough.</Text></View></Card><Text style={s.sectionTitle}>Domains</Text><Card>{domainMeta.map((d, i) => <ListRow key={d.id} title={d.name} meta={rt.domainScores[d.id] < 70 ? 'Needs attention' : 'Building strength'} trailing={`${rt.domainScores[d.id]}%`} icon={d.icon} iconTone={d.teal ? 'teal' : 'blue'} onPress={() => navigate('domain-detail')} hideDivider={i === domainMeta.length - 1} />)}</Card><BottomTabs active="progress" navigate={navigate} /></View>;
 }
 
 function DomainDetail({ navigate, goBack }: Props) {
@@ -148,24 +151,55 @@ export const integratedCoreScreens: ScreenMap = {
 
 const s = StyleSheet.create({
   screen: { flex: 1, gap: 12 },
-  intro: { color: theme.color.textMuted, fontSize: 15, lineHeight: 22, marginTop: 7 },
+  intro: { color: theme.color.textMuted, fontSize: 16, lineHeight: 23, marginTop: 6 },
   label: { color: theme.color.textMuted, fontSize: 12, fontWeight: '700', marginBottom: 8 },
   hint: { color: theme.color.textMuted, fontSize: 12, marginTop: 7 },
-  input: { minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.color.border, paddingHorizontal: 14, color: theme.color.text, fontSize: 15, backgroundColor: theme.color.background },
-  sectionTitle: { color: theme.color.text, fontSize: 18, fontWeight: '700', marginTop: 12 },
-  sectionTitleCompact: { color: theme.color.text, fontSize: 21, fontWeight: '700' },
-  segment: { flexDirection: 'row', gap: 8 },
-  segmentItem: { flex: 1, minHeight: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surfaceMuted },
-  segmentSelected: { backgroundColor: theme.color.primaryPale, borderWidth: 1, borderColor: theme.color.primary },
-  segmentText: { color: theme.color.textMuted, fontWeight: '600' }, segmentTextSelected: { color: theme.color.primary },
-  progressHead: { gap: 8, marginBottom: 4 }, progressLabel: { color: theme.color.text, fontSize: 15, fontWeight: '600' },
-  options: { gap: 9 }, option: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54, borderWidth: 1, borderColor: theme.color.border, backgroundColor: theme.color.surface, borderRadius: 16, paddingHorizontal: 14 }, optionSelected: { borderColor: theme.color.primary, backgroundColor: theme.color.primaryPale }, radio: { width: 19, height: 19, borderRadius: 10, borderWidth: 1.5, borderColor: theme.color.textSoft }, radioSelected: { borderColor: theme.color.primary, borderWidth: 5 }, optionText: { flex: 1, color: theme.color.text, fontSize: 15 },
-  resultHero: { flexDirection: 'row', alignItems: 'center', minHeight: 158, marginHorizontal: 4 }, resultTitle: { color: theme.color.text, fontSize: 30, lineHeight: 35, fontWeight: '700' }, resultCopy: { color: theme.color.textMuted, fontSize: 14, lineHeight: 21, marginTop: 10, paddingRight: 8 },
-  anchorCard: { marginHorizontal: 4, paddingVertical: 13, paddingHorizontal: 16 }, cardTitle: { color: theme.color.text, fontSize: 18, fontWeight: '700' }, rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, meta: { color: theme.color.textMuted, fontSize: 12 },
-  domainRow: { minHeight: 61, flexDirection: 'row', alignItems: 'center', gap: 10 }, domainName: { color: theme.color.text, fontSize: 15, fontWeight: '600', marginBottom: 6 }, domainScore: { color: theme.color.textMuted, fontSize: 14 },
-  homeHero: { flexDirection: 'row', alignItems: 'center', padding: 17, minHeight: 205 }, heroCopy: { flex: 1, marginLeft: 15 }, heroTitle: { color: theme.color.text, fontSize: 21, fontWeight: '700' }, heroDelta: { color: theme.color.tealDark, fontSize: 15, fontWeight: '600', marginTop: 5 }, divider: { height: 1, backgroundColor: theme.color.border, marginVertical: 14 }, heroSupport: { color: theme.color.textMuted, fontSize: 13, lineHeight: 18 }, heroPass: { color: theme.color.text, fontSize: 16, fontWeight: '700', marginVertical: 5 },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }, planCard: { paddingVertical: 6, paddingHorizontal: 14 }, quickRow: { flexDirection: 'row', gap: 8 },
-  note: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 4 }, noteTitle: { color: theme.color.text, fontSize: 16, fontWeight: '700' }, noteText: { color: theme.color.textMuted, fontSize: 13, lineHeight: 19, marginTop: 3 },
-  complete: { alignItems: 'center', gap: 10, paddingVertical: 28 }, summaryRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }, bigMetric: { color: theme.color.text, fontSize: 25, fontWeight: '700' },
-  progressCard: { flexDirection: 'row', alignItems: 'center', gap: 18 }
+  input: { minHeight: 52, borderRadius: 16, borderWidth: 1, borderColor: theme.color.borderStrong, paddingHorizontal: 15, color: theme.color.text, fontSize: 17, backgroundColor: theme.color.surfaceMuted },
+  sectionTitle: { color: theme.color.text, fontSize: 19, fontWeight: '700', marginTop: 14 },
+  sectionTitleCompact: { color: theme.color.text, fontSize: 21, lineHeight: 27, fontWeight: '700' },
+  segment: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  segmentItem: { flex: 1, minWidth: 86, minHeight: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surfaceMuted, borderWidth: 1, borderColor: 'transparent' },
+  segmentSelected: { backgroundColor: theme.color.primaryPale, borderColor: theme.color.primary },
+  segmentText: { color: theme.color.textMuted, fontSize: 15, fontWeight: '600' },
+  segmentTextSelected: { color: theme.color.primaryDark },
+  progressHead: { gap: 9, marginBottom: 5 },
+  progressLabel: { color: theme.color.text, fontSize: 15, fontWeight: '600' },
+  options: { gap: 10 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 60, borderWidth: 1, borderColor: theme.color.border, backgroundColor: theme.color.surface, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 12, ...theme.shadow.soft },
+  optionSelected: { borderColor: theme.color.primary, backgroundColor: theme.color.primaryPale },
+  optionPressed: { transform: [{ scale: theme.motion.pressScale }], opacity: 0.95 },
+  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: theme.color.textSoft },
+  radioSelected: { borderColor: theme.color.primary, borderWidth: 5 },
+  optionText: { flex: 1, color: theme.color.text, fontSize: 16, lineHeight: 22 },
+  resultHero: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, minHeight: 158, marginHorizontal: 2 },
+  resultCopyWrap: { flex: 1, minWidth: 190 },
+  resultTitle: { color: theme.color.text, fontSize: 30, lineHeight: 36, fontWeight: '700' },
+  resultCopy: { color: theme.color.textMuted, fontSize: 15, lineHeight: 22, marginTop: 9, paddingRight: 4 },
+  anchorCard: { marginHorizontal: 2, paddingVertical: 14, paddingHorizontal: 16 },
+  cardTitle: { color: theme.color.text, fontSize: 18, fontWeight: '700' },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  meta: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17 },
+  domainRow: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  domainName: { color: theme.color.text, fontSize: 15, fontWeight: '600', marginBottom: 6 },
+  domainScore: { color: theme.color.textMuted, fontSize: 14, fontWeight: '600' },
+  homeIntro: { gap: 3, marginTop: -2, marginBottom: 2 },
+  homeGreeting: { color: theme.color.text, fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: -0.55 },
+  homeSub: { color: theme.color.textMuted, fontSize: 15, lineHeight: 21 },
+  homeHero: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 18, padding: 18, minHeight: 190 },
+  heroCopy: { flex: 1, minWidth: 150, gap: 8 },
+  heroTitle: { color: theme.color.text, fontSize: 21, lineHeight: 27, fontWeight: '700' },
+  heroDelta: { color: theme.color.success, fontSize: 16, fontWeight: '700' },
+  heroSupport: { color: theme.color.textMuted, fontSize: 14, lineHeight: 20 },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 6 },
+  progressList: { paddingVertical: 4, paddingHorizontal: 14 },
+  progressDomain: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.color.border, paddingVertical: 9 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  note: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginTop: 4 },
+  noteTitle: { color: theme.color.text, fontSize: 16, fontWeight: '700' },
+  noteText: { color: theme.color.textMuted, fontSize: 13, lineHeight: 19, marginTop: 3 },
+  complete: { alignItems: 'center', gap: 10, paddingVertical: 28 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around', alignItems: 'center', gap: 20 },
+  bigMetric: { color: theme.color.text, fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  progressCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 18 },
+  progressCopy: { flex: 1, minWidth: 160, gap: 5 }
 });
