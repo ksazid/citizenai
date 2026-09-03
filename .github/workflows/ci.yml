@@ -104,7 +104,10 @@ jobs:
           trap 'kill $SERVER_PID || true' EXIT
           sleep 3
           for SCREEN in welcome diagnostic-result home compare-concepts pass-ready; do
-            google-chrome --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=430,932 --screenshot="screenshots/${SCREEN}.png" "http://127.0.0.1:4173/?screen=${SCREEN}"
+            URL="http://127.0.0.1:4173/?screen=${SCREEN}"
+            google-chrome --headless --disable-gpu --no-sandbox --dump-dom "$URL" > "screenshots/${SCREEN}.html"
+            grep -q "CitizenAI" "screenshots/${SCREEN}.html"
+            google-chrome --headless --disable-gpu --no-sandbox --hide-scrollbars --window-size=430,932 --screenshot="screenshots/${SCREEN}.png" "$URL"
           done
           test -s screenshots/welcome.png
           test -s screenshots/diagnostic-result.png
