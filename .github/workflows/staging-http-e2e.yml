@@ -1,0 +1,23 @@
+name: CitizenAI Staging HTTP E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-http-e2e:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'citizenai-staging-http-e2e'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify live Render + Supabase staging persistence
+        env:
+          CITIZENAI_STAGING_API_URL: https://citizenai-api-staging.onrender.com
+        run: node scripts/staging-http-e2e.mjs
