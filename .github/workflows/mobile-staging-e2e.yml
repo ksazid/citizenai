@@ -1,0 +1,42 @@
+name: CitizenAI Mobile Staging E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-staging-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Expo mobile dependencies
+        working-directory: apps/mobile
+        run: npm install --no-audit --no-fund
+
+      - name: Export staging-connected Expo web build
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_CITIZENAI_API_URL: https://citizenai-api-staging.onrender.com
+        run: npx expo export --platform web --output-dir dist-staging
+
+      - name: Install browser driver
+        run: npm install --no-save --no-audit --no-fund playwright-core@1.55.0
+
+      - name: Run onboarding to restart persistence E2E
+        env:
+          CITIZENAI_MOBILE_WEB_URL: http://127.0.0.1:4173
+          CITIZENAI_STAGING_API_URL: https://citizenai-api-staging.onrender.com
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          python3 -m http.server 4173 --directory apps/mobile/dist-staging >/tmp/citizenai-mobile-staging.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 3
+          node scripts/mobile-staging-ui-e2e.mjs
