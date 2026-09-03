@@ -1,4 +1,4 @@
-declare const process: { env?: Record<string, string | undefined> };
+declare const process: { env: { EXPO_PUBLIC_CITIZENAI_API_URL?: string } };
 
 export type RemoteQuestion = {
   id: string;
@@ -15,7 +15,8 @@ type RequestInitLike = {
   body?: string;
 };
 
-const configuredBaseUrl = () => String(process?.env?.EXPO_PUBLIC_CITIZENAI_API_URL ?? '').replace(/\/$/, '');
+// Expo substitutes EXPO_PUBLIC_* values only when referenced with static dot notation.
+const configuredBaseUrl = () => String(process.env.EXPO_PUBLIC_CITIZENAI_API_URL ?? '').replace(/\/$/, '');
 
 export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
   const enabled = Boolean(baseUrl);
