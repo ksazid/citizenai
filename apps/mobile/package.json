@@ -15,15 +15,17 @@
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo": "~57.0.0",
     "expo-blur": "~57.0.2",
+    "expo-dev-client": "~57.0.18",
     "expo-haptics": "~57.0.2",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-native": "0.86.0",
-    "react-native-svg": "15.15.1",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "typescript": "~5.9.0"
+    "typescript": "~6.0.3"
   }
 }

@@ -66,9 +66,12 @@ test('mobile app is interactive rather than a static mockup', () => {
 test('mobile scaffold targets stable Expo SDK 57', () => {
   assert.equal(pkg.dependencies.expo, '~57.0.0');
   assert.equal(pkg.dependencies.react, '19.2.3');
-  assert.equal(pkg.dependencies['react-native'], '0.86.0');
+  assert.equal(pkg.dependencies['react-native'], '0.86.3');
+  assert.equal(pkg.dependencies['react-native-svg'], '15.15.4');
+  assert.equal(pkg.devDependencies.typescript, '~6.0.3');
   assert.ok(pkg.dependencies['@expo/vector-icons']);
-  assert.ok(pkg.dependencies['react-native-svg']);
   assert.ok(pkg.dependencies['expo-blur']);
   assert.ok(pkg.dependencies['expo-haptics']);
+  assert.ok(pkg.dependencies['expo-dev-client']);
+  assert.ok(pkg.dependencies['react-native-safe-area-context']);
 });
