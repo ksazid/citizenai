@@ -80,7 +80,19 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package.json
       - run: npm install --no-audit --no-fund
+      - name: Verify Expo dependency compatibility
+        run: npx expo install --check
       - run: npx tsc --noEmit
+      - name: Resolve public native app config
+        run: npx expo config --type public > /tmp/citizenai-expo-config.json
+      - name: Generate Android native project
+        env:
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform android --no-install --clean
+      - name: Generate iOS native project
+        env:
+          EXPO_NO_GIT_STATUS: '1'
+        run: npx expo prebuild --platform ios --no-install --clean
 
   visual-anchor-capture:
     runs-on: ubuntu-latest
