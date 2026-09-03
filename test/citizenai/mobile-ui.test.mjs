@@ -31,12 +31,19 @@ test('navigation exposes only the frozen four primary tabs', () => {
   for (const forbidden of ['chat:', 'community:', 'explore:', 'courses:']) assert.doesNotMatch(model, new RegExp(forbidden));
 });
 
-test('approved UI DNA remains encoded in mobile tokens', () => {
-  assert.match(theme, /background: '#FBFCFF'/);
+test('approved Apple-native UI DNA remains encoded in mobile tokens and primitives', () => {
+  assert.match(theme, /background: '#F4F7FC'/);
   assert.match(theme, /text: '#071B57'/);
   assert.match(theme, /primary: '#1F5BE8'/);
+  assert.match(theme, /primaryDark: '#0A2E7D'/);
   assert.match(theme, /teal: '#16A3A1'/);
+  assert.match(theme, /glass: 'rgba\(255,255,255,0\.76\)'/);
   assert.match(theme, /Pass Ready/);
+  assert.match(components, /BlurView/);
+  assert.match(components, /expo-haptics/);
+  assert.match(components, /width: 44, height: 44/);
+  assert.match(components, /persistent = false/);
+  assert.match(app, /<BottomTabs persistent/);
 });
 
 test('approved five visual anchors are explicitly represented', () => {
@@ -62,4 +69,6 @@ test('mobile scaffold targets stable Expo SDK 57', () => {
   assert.equal(pkg.dependencies['react-native'], '0.86.0');
   assert.ok(pkg.dependencies['@expo/vector-icons']);
   assert.ok(pkg.dependencies['react-native-svg']);
+  assert.ok(pkg.dependencies['expo-blur']);
+  assert.ok(pkg.dependencies['expo-haptics']);
 });
