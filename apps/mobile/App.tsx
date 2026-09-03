@@ -5,6 +5,7 @@ import { integratedCoreScreens } from './src/integratedCoreScreens';
 import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
 import { integratedSourceInfoScreen } from './src/integratedSourceInfoScreen';
+import { integratedWelcomeScreen } from './src/integratedWelcomeScreen';
 import { SCREEN_IDS, ScreenId } from './src/model';
 import { CitizenAIRuntimeProvider } from './src/runtime';
 import './src/verifiedPackInstall';
@@ -25,7 +26,8 @@ function MobileApp() {
   const current = history[history.length - 1];
   const Screen = useMemo(() => {
     // Visual capture now exercises the same integrated screen hierarchy users see.
-    return integratedCoreScreens[current]
+    return integratedWelcomeScreen[current]
+      ?? integratedCoreScreens[current]
       ?? integratedLearningScreens[current]
       ?? integratedSourceInfoScreen[current]
       ?? integratedLifecycleScreens[current]
