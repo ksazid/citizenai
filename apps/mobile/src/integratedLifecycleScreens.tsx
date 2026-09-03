@@ -112,7 +112,7 @@ export const integratedLifecycleScreens: ScreenMap = {
 const s = StyleSheet.create({
   screen: { flex: 1, gap: 12 },
   rowBetween: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  label: { color: theme.color.text, fontSize: 15, lineHeight: 20, fontWeight: '650' },
+  label: { color: theme.color.text, fontSize: 15, lineHeight: 20, fontWeight: '600' },
   meta: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17 },
   copy: { color: theme.color.textMuted, fontSize: 15, lineHeight: 22, marginTop: 7 },
   heroMetric: { color: theme.color.text, fontSize: 48, lineHeight: 52, fontWeight: '700' },
