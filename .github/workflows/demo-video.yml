@@ -1,0 +1,61 @@
+name: CitizenAI Staging Demo Video
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/demo-video.yml'
+      - 'scripts/record-demo-video.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Expo mobile dependencies
+        working-directory: apps/mobile
+        run: npm install --no-audit --no-fund
+
+      - name: Export staging-connected Expo web build
+        working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_CITIZENAI_API_URL: https://citizenai-api-staging.onrender.com
+        run: npx expo export --platform web --output-dir dist-demo
+
+      - name: Install video tooling
+        run: |
+          npm install --no-save --no-audit --no-fund playwright-core@1.55.0
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Record real staging walkthrough
+        env:
+          CITIZENAI_MOBILE_WEB_URL: http://127.0.0.1:4173
+          CITIZENAI_STAGING_API_URL: https://citizenai-api-staging.onrender.com
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          python3 -m http.server 4173 --directory apps/mobile/dist-demo >/tmp/citizenai-demo-web.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 3
+          node scripts/record-demo-video.mjs
+          mkdir -p .artifacts/demo-video
+          ffmpeg -y -framerate 8 -i '.artifacts/demo-video/frames/frame-%06d.jpg' \
+            -vf 'scale=430:932:flags=lanczos,format=yuv420p' \
+            -c:v libx264 -preset medium -crf 20 -movflags +faststart \
+            .artifacts/demo-video/citizenai-staging-walkthrough.mp4
+          test -s .artifacts/demo-video/citizenai-staging-walkthrough.mp4
+
+      - name: Upload CitizenAI walkthrough
+        uses: actions/upload-artifact@v4
+        with:
+          name: citizenai-staging-walkthrough-video
+          path: .artifacts/demo-video/citizenai-staging-walkthrough.mp4
+          if-no-files-found: error
