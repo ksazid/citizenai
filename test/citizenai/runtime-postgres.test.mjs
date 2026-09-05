@@ -31,6 +31,15 @@ test('PostgreSQL persists CitizenAI learner, attempts and mastery across reposit
     assert.equal(rls.rows.length, RUNTIME_TABLES.length);
     assert.equal(rls.rows.every((row) => row.relrowsecurity === true), true, 'every CitizenAI public runtime table must have RLS enabled');
 
+    const examOutcomeIndex = await pool.query(`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND tablename = 'citizenai_exam_outcome'
+        AND indexname = 'citizenai_exam_outcome_learner_idx'
+    `);
+    assert.equal(examOutcomeIndex.rows.length, 1, 'exam outcome learner foreign key must have a covering index');
+
     const repository = new PostgresRuntimeRepository(pool);
     const service = createRuntimeService({ repository });
     const learner = await service.createLearner({ examDate: '2026-10-01' });
