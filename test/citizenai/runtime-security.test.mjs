@@ -4,13 +4,24 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { once } from 'node:events';
 import { createRuntimeHttpHandler } from '../../src/citizenai/runtime-http.mjs';
+import { guestAccessTokenForLearner, verifyGuestAccessToken } from '../../src/citizenai/runtime-access.mjs';
 import { MemoryRuntimeRepository } from '../../src/citizenai/runtime-repository.mjs';
 import { createRuntimeService } from '../../src/citizenai/runtime-service.mjs';
 import { assertRuntimeLaunchPolicy } from '../../src/citizenai/api-server.mjs';
 import { UK_ACTIVE_PACK } from '../../src/citizenai/uk-active-pack.mjs';
 
-async function withServer({ service, ...handlerOptions }, fn) {
-  const server = http.createServer(createRuntimeHttpHandler({ service, ...handlerOptions }));
+const TEST_GUEST_SECRET = 'citizenai-test-guest-secret-0123456789abcdef';
+
+function accessOptions(repository) {
+  return {
+    issueLearnerAccessToken: (learnerId) => guestAccessTokenForLearner(learnerId, TEST_GUEST_SECRET),
+    authorizeLearner: async (learnerId, token) => verifyGuestAccessToken({ learnerId, token, secret: TEST_GUEST_SECRET }),
+    resolveMockLearnerId: async (mockId) => repository ? (await repository.getMock(mockId))?.learnerId ?? null : null
+  };
+}
+
+async function withServer({ service, repository = null, ...handlerOptions }, fn) {
+  const server = http.createServer(createRuntimeHttpHandler({ service, ...accessOptions(repository), ...handlerOptions }));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -35,6 +46,11 @@ async function jsonRequest(baseUrl, path, { method = 'GET', body, headers = {} }
   return { response, payload, text };
 }
 
+const authHeaders = (learnerId) => ({
+  'x-citizenai-learner-id': learnerId,
+  authorization: `Bearer ${guestAccessTokenForLearner(learnerId, TEST_GUEST_SECRET)}`
+});
+
 test('HTTP boundary applies security headers and rejects unapproved browser origins', async () => {
   await withServer({ service: {}, allowedOrigin: 'https://app.example' }, async (baseUrl) => {
     const allowed = await jsonRequest(baseUrl, '/healthz', { headers: { origin: 'https://app.example' } });
@@ -53,10 +69,49 @@ test('HTTP boundary applies security headers and rejects unapproved browser orig
   });
 });
 
+test('guest token protects learner data even when learner UUID is known', async () => {
+  const repository = new MemoryRuntimeRepository();
+  const service = createRuntimeService({ repository });
+  await withServer({ service, repository }, async (baseUrl) => {
+    const created = await jsonRequest(baseUrl, '/v1/learners', { method: 'POST', body: { examDate: '2026-09-30' } });
+    assert.equal(created.response.status, 201);
+    assert.match(created.payload.accessToken, /^citizenai_guest_/);
+    const learnerId = created.payload.id;
+
+    const missing = await jsonRequest(baseUrl, '/v1/dashboard', { headers: { 'x-citizenai-learner-id': learnerId } });
+    assert.equal(missing.response.status, 401);
+    assert.equal(missing.payload.error, 'unauthorized');
+
+    const wrong = await jsonRequest(baseUrl, '/v1/dashboard', {
+      headers: { 'x-citizenai-learner-id': learnerId, authorization: 'Bearer citizenai_guest_wrong' }
+    });
+    assert.equal(wrong.response.status, 401);
+
+    const allowed = await jsonRequest(baseUrl, '/v1/dashboard', {
+      headers: { 'x-citizenai-learner-id': learnerId, authorization: `Bearer ${created.payload.accessToken}` }
+    });
+    assert.equal(allowed.response.status, 200);
+    assert.equal(allowed.payload.learner.id, learnerId);
+  });
+});
+
+test('guest token cannot be replayed against another learner', async () => {
+  const repository = new MemoryRuntimeRepository();
+  const service = createRuntimeService({ repository });
+  await withServer({ service, repository }, async (baseUrl) => {
+    const first = (await jsonRequest(baseUrl, '/v1/learners', { method: 'POST', body: {} })).payload;
+    const second = (await jsonRequest(baseUrl, '/v1/learners', { method: 'POST', body: {} })).payload;
+    const replay = await jsonRequest(baseUrl, '/v1/dashboard', {
+      headers: { 'x-citizenai-learner-id': second.id, authorization: `Bearer ${first.accessToken}` }
+    });
+    assert.equal(replay.response.status, 401);
+  });
+});
+
 test('HTTP boundary rejects unsupported content types, malformed JSON and oversized bodies', async () => {
   const repository = new MemoryRuntimeRepository();
   const service = createRuntimeService({ repository });
-  await withServer({ service, maxBodyBytes: 64 }, async (baseUrl) => {
+  await withServer({ service, repository, maxBodyBytes: 64 }, async (baseUrl) => {
     const wrongType = await jsonRequest(baseUrl, '/v1/learners', {
       method: 'POST',
       body: '{}',
@@ -81,9 +136,7 @@ test('unexpected server failures never expose internal error messages to clients
     async dashboard() { throw new Error('DATABASE_URL=supersecret'); }
   };
   await withServer({ service }, async (baseUrl) => {
-    const result = await jsonRequest(baseUrl, '/v1/dashboard', {
-      headers: { 'x-citizenai-learner-id': learnerId }
-    });
+    const result = await jsonRequest(baseUrl, '/v1/dashboard', { headers: authHeaders(learnerId) });
     assert.equal(result.response.status, 500);
     assert.equal(result.payload.error, 'internal_error');
     assert.ok(result.payload.requestId);
@@ -96,7 +149,7 @@ test('HTTP boundary rate limits repeated non-health requests', async () => {
   const learnerId = crypto.randomUUID();
   const service = { async dashboard() { return { ok: true }; } };
   await withServer({ service, rateLimitMaxRequests: 2, rateLimitWindowMs: 60_000 }, async (baseUrl) => {
-    const headers = { 'x-citizenai-learner-id': learnerId };
+    const headers = authHeaders(learnerId);
     assert.equal((await jsonRequest(baseUrl, '/v1/dashboard', { headers })).response.status, 200);
     assert.equal((await jsonRequest(baseUrl, '/v1/dashboard', { headers })).response.status, 200);
     const limited = await jsonRequest(baseUrl, '/v1/dashboard', { headers });
