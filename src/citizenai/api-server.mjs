@@ -1,9 +1,13 @@
+import crypto from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PostgresRuntimeRepository } from './runtime-repository.mjs';
 import { createRuntimeService } from './runtime-service.mjs';
 import { createRuntimeHttpHandler } from './runtime-http.mjs';
+import { guestAccessTokenForLearner, validateGuestTokenSecret, verifyGuestAccessToken } from './runtime-access.mjs';
+
+const DEVELOPMENT_GUEST_TOKEN_SECRET = crypto.randomBytes(32).toString('base64url');
 
 function positiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
@@ -40,12 +44,21 @@ export async function startCitizenAIServer(options = {}) {
   const allowedOrigin = options.allowedOrigin ?? process.env.CITIZENAI_ALLOWED_ORIGIN ?? '*';
   assertRuntimeLaunchPolicy({ environment, allowedOrigin });
 
+  const configuredGuestSecret = options.guestTokenSecret ?? process.env.CITIZENAI_GUEST_TOKEN_SECRET;
+  if (!configuredGuestSecret && environment !== 'development' && environment !== 'test') {
+    throw new Error('CITIZENAI_GUEST_TOKEN_SECRET is required outside development/test');
+  }
+  const guestTokenSecret = validateGuestTokenSecret(configuredGuestSecret || DEVELOPMENT_GUEST_TOKEN_SECRET);
+
   const pool = options.pool ?? await createPostgresPool(options.databaseUrl);
   if (options.migrate !== false) await migrateRuntime(pool);
   const repository = new PostgresRuntimeRepository(pool);
   const service = createRuntimeService({ repository });
   const handler = createRuntimeHttpHandler({
     service,
+    issueLearnerAccessToken: (learnerId) => guestAccessTokenForLearner(learnerId, guestTokenSecret),
+    authorizeLearner: async (learnerId, token) => verifyGuestAccessToken({ learnerId, token, secret: guestTokenSecret }),
+    resolveMockLearnerId: async (mockId) => (await repository.getMock(mockId))?.learnerId ?? null,
     allowedOrigin,
     maxBodyBytes: positiveInteger(options.maxBodyBytes ?? process.env.CITIZENAI_MAX_BODY_BYTES, 256 * 1024, { min: 1024, max: 2 * 1024 * 1024 }),
     rateLimitWindowMs: positiveInteger(options.rateLimitWindowMs ?? process.env.CITIZENAI_RATE_LIMIT_WINDOW_MS, 60_000, { min: 1000, max: 3_600_000 }),
