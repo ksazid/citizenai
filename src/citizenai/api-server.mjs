@@ -8,11 +8,39 @@ import { createRuntimeHttpHandler } from './runtime-http.mjs';
 import { guestAccessTokenForLearner, validateGuestTokenSecret, verifyGuestAccessToken } from './runtime-access.mjs';
 
 const DEVELOPMENT_GUEST_TOKEN_SECRET = crypto.randomBytes(32).toString('base64url');
+const SSL_CONNECTION_PARAMETERS = ['sslmode', 'sslcert', 'sslkey', 'sslrootcert'];
 
 function positiveInteger(value, fallback, { min = 1, max = Number.MAX_SAFE_INTEGER } = {}) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) return fallback;
   return parsed;
+}
+
+function normalizePem(value) {
+  return String(value ?? '').replace(/\\n/g, '\n').trim();
+}
+
+export function sanitizePostgresConnectionString(databaseUrl) {
+  const parsed = new URL(databaseUrl);
+  for (const parameter of SSL_CONNECTION_PARAMETERS) parsed.searchParams.delete(parameter);
+  return parsed.toString();
+}
+
+export function createPostgresSslConfig({
+  pgssl = process.env.PGSSL,
+  rootCertificate = process.env.PGSSLROOTCERT_PEM
+} = {}) {
+  if (pgssl === 'disable') return false;
+
+  const ca = normalizePem(rootCertificate);
+  if (!ca) {
+    throw new Error('PGSSLROOTCERT_PEM is required when PostgreSQL TLS is enabled');
+  }
+
+  return {
+    rejectUnauthorized: true,
+    ca
+  };
 }
 
 export function assertRuntimeLaunchPolicy({ environment = 'development', allowedOrigin = '*' } = {}) {
@@ -26,8 +54,8 @@ export async function createPostgresPool(databaseUrl = process.env.DATABASE_URL)
   if (!databaseUrl) throw new Error('DATABASE_URL is required');
   const { Pool } = await import('pg');
   return new Pool({
-    connectionString: databaseUrl,
-    ssl: process.env.PGSSL === 'disable' ? false : { rejectUnauthorized: false },
+    connectionString: sanitizePostgresConnectionString(databaseUrl),
+    ssl: createPostgresSslConfig(),
     max: positiveInteger(process.env.PGPOOL_MAX, 10, { min: 1, max: 50 }),
     connectionTimeoutMillis: positiveInteger(process.env.PG_CONNECTION_TIMEOUT_MS, 10_000, { min: 1000, max: 60_000 }),
     idleTimeoutMillis: positiveInteger(process.env.PG_IDLE_TIMEOUT_MS, 30_000, { min: 1000, max: 300_000 })
