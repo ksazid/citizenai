@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { PostgresAccountOwnershipRepository, createSupabaseAuthVerifier } from './account-access.mjs';
 import { PostgresRuntimeRepository } from './runtime-repository.mjs';
 import { createRuntimeService } from './runtime-service.mjs';
 import { createRuntimeHttpHandler } from './runtime-http.mjs';
@@ -47,7 +48,7 @@ export function assertRuntimeLaunchPolicy({ environment = 'development', allowed
   if (environment !== 'production') return true;
   const origins = String(allowedOrigin ?? '').split(',').map((value) => value.trim()).filter(Boolean);
   if (origins.includes('*')) throw new Error('production runtime cannot use wildcard CORS');
-  throw new Error('production runtime launch is blocked until consumer authentication is implemented');
+  throw new Error('production runtime launch is blocked until consumer authentication is implemented and remaining release gates are complete');
 }
 
 export async function createPostgresPool(databaseUrl = process.env.DATABASE_URL) {
@@ -88,12 +89,52 @@ export async function startCitizenAIServer(options = {}) {
 
   const pool = options.pool ?? await createPostgresPool(options.databaseUrl);
   if (options.migrate !== false) await migrateRuntime(pool);
-  const repository = new PostgresRuntimeRepository(pool);
-  const service = createRuntimeService({ repository });
+  const repository = options.repository ?? new PostgresRuntimeRepository(pool);
+  const ownershipRepository = options.ownershipRepository ?? new PostgresAccountOwnershipRepository(pool);
+  const service = options.service ?? createRuntimeService({ repository });
+  const authenticateAccount = options.authenticateAccount ?? createSupabaseAuthVerifier({
+    supabaseUrl: options.supabaseUrl ?? process.env.SUPABASE_URL,
+    publishableKey: options.supabasePublishableKey ?? process.env.SUPABASE_PUBLISHABLE_KEY
+  });
+
+  const authorizeGuestLearner = async (learnerId, token) => verifyGuestAccessToken({ learnerId, token, secret: guestTokenSecret });
+  const authorizeLearner = async (learnerId, token) => {
+    const ownership = await ownershipRepository.findByLearnerId(learnerId);
+    if (!ownership) return authorizeGuestLearner(learnerId, token);
+    const account = await authenticateAccount(token);
+    return account?.id === ownership.authUserId;
+  };
+  const findLearnerForAccount = async (authUserId) => {
+    const ownership = await ownershipRepository.findByAuthUserId(authUserId);
+    if (!ownership) return null;
+    return repository.getLearner(ownership.learnerId);
+  };
+  const claimLearnerForAccount = async (learnerId, authUserId) => {
+    const learner = await repository.getLearner(learnerId);
+    if (!learner) return { ok: false, reason: 'learner_not_found' };
+
+    const existingLearnerOwner = await ownershipRepository.findByLearnerId(learnerId);
+    if (existingLearnerOwner && existingLearnerOwner.authUserId !== authUserId) {
+      return { ok: false, reason: 'learner_already_claimed' };
+    }
+    const existingAccountLearner = await ownershipRepository.findByAuthUserId(authUserId);
+    if (existingAccountLearner && existingAccountLearner.learnerId !== learnerId) {
+      return { ok: false, reason: 'account_already_has_learner' };
+    }
+
+    const ownership = await ownershipRepository.claim(learnerId, authUserId);
+    if (!ownership) return { ok: false, reason: 'claim_conflict' };
+    return { ok: true, learner };
+  };
+
   const handler = createRuntimeHttpHandler({
     service,
     issueLearnerAccessToken: (learnerId) => guestAccessTokenForLearner(learnerId, guestTokenSecret),
-    authorizeLearner: async (learnerId, token) => verifyGuestAccessToken({ learnerId, token, secret: guestTokenSecret }),
+    authorizeLearner,
+    authorizeGuestLearner,
+    authenticateAccount,
+    findLearnerForAccount,
+    claimLearnerForAccount,
     resolveMockLearnerId: async (mockId) => (await repository.getMock(mockId))?.learnerId ?? null,
     allowedOrigin,
     maxBodyBytes: positiveInteger(options.maxBodyBytes ?? process.env.CITIZENAI_MAX_BODY_BYTES, 256 * 1024, { min: 1024, max: 2 * 1024 * 1024 }),
@@ -121,7 +162,7 @@ export async function startCitizenAIServer(options = {}) {
     server.once('error', reject);
     server.listen(port, host, resolve);
   });
-  return { server, pool, service, repository, port, host };
+  return { server, pool, service, repository, ownershipRepository, port, host };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
