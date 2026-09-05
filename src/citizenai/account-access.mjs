@@ -2,19 +2,29 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 
 const normalizeBaseUrl = (value) => String(value ?? '').trim().replace(/\/$/, '');
 
+function verificationTimeout(value, fallback = 5_000) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 100 || parsed > 30_000) return fallback;
+  return parsed;
+}
+
 export function createSupabaseAuthVerifier({
   supabaseUrl = process.env.SUPABASE_URL,
   publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY,
-  fetchImpl = globalThis.fetch
+  fetchImpl = globalThis.fetch,
+  timeoutMs = process.env.CITIZENAI_AUTH_VERIFY_TIMEOUT_MS
 } = {}) {
   const baseUrl = normalizeBaseUrl(supabaseUrl);
   const apiKey = String(publishableKey ?? '').trim();
   const configured = Boolean(baseUrl && apiKey && typeof fetchImpl === 'function');
+  const boundedTimeoutMs = verificationTimeout(timeoutMs);
 
   const verify = async (accessToken) => {
     const token = String(accessToken ?? '').trim();
     if (!configured || !token || token.startsWith('citizenai_guest_')) return null;
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), boundedTimeoutMs);
     let response;
     try {
       response = await fetchImpl(`${baseUrl}/auth/v1/user`, {
@@ -22,10 +32,13 @@ export function createSupabaseAuthVerifier({
           apikey: apiKey,
           authorization: `Bearer ${token}`,
           accept: 'application/json'
-        }
+        },
+        signal: controller.signal
       });
     } catch {
       return null;
+    } finally {
+      clearTimeout(timeout);
     }
     if (!response?.ok) return null;
 
@@ -36,6 +49,7 @@ export function createSupabaseAuthVerifier({
     return { id: user.id, email: typeof user.email === 'string' ? user.email : null };
   };
   verify.configured = configured;
+  verify.timeoutMs = boundedTimeoutMs;
   return verify;
 }
 
