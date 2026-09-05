@@ -24,6 +24,8 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_PUBLIC_CITIZENAI_API_URL: https://citizenai-api-staging.onrender.com
+          EXPO_PUBLIC_SUPABASE_URL: https://jvnlknxzmozdxsmtozdg.supabase.co
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_EorBWfY5dfoQZcgwoFOaeA_Mp_0B3e5
         run: npx expo export --platform web --output-dir dist-staging
 
       - name: Install browser driver
