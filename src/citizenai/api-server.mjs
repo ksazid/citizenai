@@ -48,7 +48,7 @@ export function assertRuntimeLaunchPolicy({ environment = 'development', allowed
   if (environment !== 'production') return true;
   const origins = String(allowedOrigin ?? '').split(',').map((value) => value.trim()).filter(Boolean);
   if (origins.includes('*')) throw new Error('production runtime cannot use wildcard CORS');
-  throw new Error('production runtime launch is blocked until remaining consumer release gates are implemented');
+  throw new Error('production runtime launch is blocked until consumer authentication is implemented and remaining release gates are complete');
 }
 
 export async function createPostgresPool(databaseUrl = process.env.DATABASE_URL) {
