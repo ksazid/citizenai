@@ -1,0 +1,35 @@
+name: Generate npm lockfiles
+
+on:
+  push:
+    branches: [citizenai/dependency-locks]
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: citizenai/dependency-locks
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Generate root lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Generate mobile lockfile
+        working-directory: apps/mobile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfiles
+        run: |
+          if git diff --quiet -- package-lock.json apps/mobile/package-lock.json && [ -f package-lock.json ] && [ -f apps/mobile/package-lock.json ]; then
+            echo "Lockfiles already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json apps/mobile/package-lock.json
+          git commit -m "build: lock npm dependency graph"
+          git push origin HEAD:citizenai/dependency-locks
