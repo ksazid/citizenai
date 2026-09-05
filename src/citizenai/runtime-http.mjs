@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { URL } from 'node:url';
+import { bearerTokenFromRequest } from './runtime-access.mjs';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
@@ -123,6 +124,9 @@ function learnerIdFromRequest(req, url) {
 
 export function createRuntimeHttpHandler({
   service,
+  issueLearnerAccessToken,
+  authorizeLearner,
+  resolveMockLearnerId,
   allowedOrigin = '*',
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   rateLimitWindowMs = DEFAULT_RATE_LIMIT_WINDOW_MS,
@@ -131,9 +135,23 @@ export function createRuntimeHttpHandler({
   learnerCreateMaxRequests = DEFAULT_CREATE_MAX
 }) {
   if (!service) throw new Error('runtime service required');
+  if (typeof issueLearnerAccessToken !== 'function') throw new Error('issueLearnerAccessToken required');
+  if (typeof authorizeLearner !== 'function') throw new Error('authorizeLearner required');
+  if (typeof resolveMockLearnerId !== 'function') throw new Error('resolveMockLearnerId required');
   const allowedOrigins = normalizeAllowedOrigins(allowedOrigin);
   const generalLimiter = createFixedWindowLimiter({ windowMs: rateLimitWindowMs, maxRequests: rateLimitMaxRequests });
   const learnerCreateLimiter = createFixedWindowLimiter({ windowMs: learnerCreateWindowMs, maxRequests: learnerCreateMaxRequests });
+
+  async function requireLearnerAccess(req, learnerId) {
+    const token = bearerTokenFromRequest(req);
+    if (!token || !await authorizeLearner(learnerId, token)) throw httpError(401, 'authentication required');
+  }
+
+  async function requireMockAccess(req, mockId) {
+    const learnerId = await resolveMockLearnerId(mockId);
+    if (!learnerId) throw httpError(404, 'mock not found');
+    await requireLearnerAccess(req, learnerId);
+  }
 
   return async function handler(req, res) {
     const requestId = crypto.randomUUID();
@@ -173,66 +191,90 @@ export function createRuntimeHttpHandler({
             extraHeaders: { 'retry-after': String(createRate.retryAfterSeconds) }
           });
         }
-        return send(res, 201, await service.createLearner(await readJson(req, maxBodyBytes)), { corsOrigin, requestId });
+        const learner = await service.createLearner(await readJson(req, maxBodyBytes));
+        return send(res, 201, { ...learner, accessToken: issueLearnerAccessToken(learner.id) }, { corsOrigin, requestId });
       }
 
       const learnerMatch = path.match(/^\/v1\/learners\/([^/]+)$/);
       if (learnerMatch && req.method === 'PATCH') {
         const learnerId = assertUuid(learnerMatch[1], 'learnerId');
+        await requireLearnerAccess(req, learnerId);
         return send(res, 200, await service.updateLearner(learnerId, await readJson(req, maxBodyBytes)), { corsOrigin, requestId });
       }
 
       const learnerSnapshotMatch = path.match(/^\/v1\/learners\/([^/]+)\/snapshot$/);
       if (learnerSnapshotMatch && req.method === 'GET') {
         const learnerId = assertUuid(learnerSnapshotMatch[1], 'learnerId');
+        await requireLearnerAccess(req, learnerId);
         return send(res, 200, { snapshot: await service.getSnapshot(learnerId) }, { corsOrigin, requestId });
       }
       if (learnerSnapshotMatch && req.method === 'PUT') {
         const learnerId = assertUuid(learnerSnapshotMatch[1], 'learnerId');
+        await requireLearnerAccess(req, learnerId);
         const body = await readJson(req, maxBodyBytes);
         return send(res, 200, await service.saveSnapshot(learnerId, body.state ?? body), { corsOrigin, requestId });
       }
 
       if (req.method === 'GET' && path === '/v1/dashboard') {
-        return send(res, 200, await service.dashboard(learnerIdFromRequest(req, url)), { corsOrigin, requestId });
+        const learnerId = learnerIdFromRequest(req, url);
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 200, await service.dashboard(learnerId), { corsOrigin, requestId });
       }
       if (req.method === 'GET' && path === '/v1/diagnostic/next') {
-        return send(res, 200, await service.nextDiagnosticQuestion(learnerIdFromRequest(req, url)), { corsOrigin, requestId });
+        const learnerId = learnerIdFromRequest(req, url);
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 200, await service.nextDiagnosticQuestion(learnerId), { corsOrigin, requestId });
       }
       if (req.method === 'GET' && path === '/v1/study-plan/today') {
-        const dashboard = await service.dashboard(learnerIdFromRequest(req, url));
+        const learnerId = learnerIdFromRequest(req, url);
+        await requireLearnerAccess(req, learnerId);
+        const dashboard = await service.dashboard(learnerId);
         return send(res, 200, dashboard.studyPlan, { corsOrigin, requestId });
       }
       if (req.method === 'GET' && path === '/v1/readiness') {
-        const dashboard = await service.dashboard(learnerIdFromRequest(req, url));
+        const learnerId = learnerIdFromRequest(req, url);
+        await requireLearnerAccess(req, learnerId);
+        const dashboard = await service.dashboard(learnerId);
         return send(res, 200, { ...dashboard.readiness, passReady: dashboard.passReady, coverageConfidence: dashboard.readiness.confidence }, { corsOrigin, requestId });
       }
       if (req.method === 'GET' && path === '/v1/learning/next') {
-        return send(res, 200, await service.nextLearningAction(learnerIdFromRequest(req, url)), { corsOrigin, requestId });
+        const learnerId = learnerIdFromRequest(req, url);
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 200, await service.nextLearningAction(learnerId), { corsOrigin, requestId });
       }
       if (req.method === 'POST' && path === '/v1/attempts') {
-        return send(res, 200, await service.recordAttempt(await readJson(req, maxBodyBytes)), { corsOrigin, requestId });
+        const body = await readJson(req, maxBodyBytes);
+        const learnerId = assertUuid(body.learnerId, 'learnerId');
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 200, await service.recordAttempt(body), { corsOrigin, requestId });
       }
       if (req.method === 'POST' && path === '/v1/mocks') {
         const body = await readJson(req, maxBodyBytes);
-        return send(res, 201, await service.startMock(body.learnerId), { corsOrigin, requestId });
+        const learnerId = assertUuid(body.learnerId, 'learnerId');
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 201, await service.startMock(learnerId), { corsOrigin, requestId });
       }
 
       const mockAnswerMatch = path.match(/^\/v1\/mocks\/([^/]+)\/answer$/);
       if (mockAnswerMatch && req.method === 'POST') {
         const mockId = assertUuid(mockAnswerMatch[1], 'mockId');
+        await requireMockAccess(req, mockId);
         return send(res, 200, await service.answerMock(mockId, await readJson(req, maxBodyBytes)), { corsOrigin, requestId });
       }
 
       const mockCompleteMatch = path.match(/^\/v1\/mocks\/([^/]+)\/complete$/);
       if (mockCompleteMatch && req.method === 'POST') {
         const mockId = assertUuid(mockCompleteMatch[1], 'mockId');
+        await requireMockAccess(req, mockId);
         await readJson(req, maxBodyBytes);
         return send(res, 200, await service.finishMock(mockId), { corsOrigin, requestId });
       }
 
       if (req.method === 'POST' && path === '/v1/exam-outcomes') {
-        return send(res, 201, await service.saveExamOutcome(await readJson(req, maxBodyBytes)), { corsOrigin, requestId });
+        const body = await readJson(req, maxBodyBytes);
+        const learnerId = assertUuid(body.learnerId, 'learnerId');
+        await requireLearnerAccess(req, learnerId);
+        return send(res, 201, await service.saveExamOutcome(body), { corsOrigin, requestId });
       }
       return send(res, 404, { error: 'not_found' }, { corsOrigin, requestId });
     } catch (error) {
@@ -247,7 +289,7 @@ export function createRuntimeHttpHandler({
       }
       return send(res, statusCode, statusCode >= 500
         ? { error: 'internal_error', requestId }
-        : { error: 'request_error', message: error?.message ?? 'request failed', requestId },
+        : { error: statusCode === 401 ? 'unauthorized' : 'request_error', message: error?.message ?? 'request failed', requestId },
       { corsOrigin, requestId });
     }
   };
