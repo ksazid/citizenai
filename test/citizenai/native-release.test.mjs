@@ -10,6 +10,8 @@ const appSource = fs.readFileSync(new URL('../../apps/mobile/App.tsx', import.me
 const stagingApi = 'https://citizenai-api-staging.onrender.com';
 
 test('native app identity is explicit and versionable', () => {
+  assert.equal(appConfig.owner, 'ksazids-team');
+  assert.equal(appConfig.extra.eas.projectId, '08717dc8-a438-45c3-b404-31c2465d5268');
   assert.equal(appConfig.scheme, 'citizenai');
   assert.equal(appConfig.ios.bundleIdentifier, 'ai.citizen.mobile');
   assert.equal(appConfig.android.package, 'ai.citizen.mobile');
