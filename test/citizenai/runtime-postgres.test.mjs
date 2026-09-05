@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const databaseUrl = process.env.CITIZENAI_TEST_DATABASE_URL;
+const RUNTIME_TABLES = [
+  'citizenai_learner',
+  'citizenai_attempt',
+  'citizenai_concept_mastery',
+  'citizenai_mock',
+  'citizenai_exam_outcome',
+  'citizenai_runtime_snapshot'
+];
 
 test('PostgreSQL persists CitizenAI learner, attempts and mastery across repository instances', { skip: !databaseUrl }, async () => {
   const { createPostgresPool, migrateRuntime } = await import('../../src/citizenai/api-server.mjs');
@@ -12,6 +20,17 @@ test('PostgreSQL persists CitizenAI learner, attempts and mastery across reposit
   const pool = await createPostgresPool(databaseUrl);
   try {
     await migrateRuntime(pool);
+
+    const rls = await pool.query(`
+      SELECT c.relname, c.relrowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = ANY($1::text[])
+      ORDER BY c.relname
+    `, [RUNTIME_TABLES]);
+    assert.equal(rls.rows.length, RUNTIME_TABLES.length);
+    assert.equal(rls.rows.every((row) => row.relrowsecurity === true), true, 'every CitizenAI public runtime table must have RLS enabled');
+
     const repository = new PostgresRuntimeRepository(pool);
     const service = createRuntimeService({ repository });
     const learner = await service.createLearner({ examDate: '2026-10-01' });
