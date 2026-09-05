@@ -66,7 +66,7 @@ function send(res, statusCode, payload, { corsOrigin = null, requestId, extraHea
   const headers = {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
-    'access-control-allow-headers': 'content-type,x-citizenai-learner-id,authorization',
+    'access-control-allow-headers': 'content-type,x-citizenai-learner-id,x-citizenai-guest-token,authorization',
     'access-control-allow-methods': 'GET,POST,PATCH,PUT,OPTIONS',
     'access-control-max-age': '600',
     'cache-control': 'no-store',
@@ -122,10 +122,19 @@ function learnerIdFromRequest(req, url) {
   return assertUuid(fromHeader || url.searchParams.get('learnerId'), 'learnerId');
 }
 
+function headerValue(req, name) {
+  const value = req.headers[name];
+  return Array.isArray(value) ? value[0] : value ?? null;
+}
+
 export function createRuntimeHttpHandler({
   service,
   issueLearnerAccessToken,
   authorizeLearner,
+  authorizeGuestLearner = async () => false,
+  authenticateAccount = async () => null,
+  findLearnerForAccount = async () => null,
+  claimLearnerForAccount = async () => ({ ok: false, reason: 'account_auth_unavailable' }),
   resolveMockLearnerId,
   allowedOrigin = '*',
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
@@ -145,6 +154,13 @@ export function createRuntimeHttpHandler({
   async function requireLearnerAccess(req, learnerId) {
     const token = bearerTokenFromRequest(req);
     if (!token || !await authorizeLearner(learnerId, token)) throw httpError(401, 'authentication required');
+  }
+
+  async function requireAccountAccess(req) {
+    const token = bearerTokenFromRequest(req);
+    const account = token ? await authenticateAccount(token) : null;
+    if (!account?.id) throw httpError(401, 'account authentication required');
+    return account;
   }
 
   async function requireMockAccess(req, mockId) {
@@ -180,6 +196,29 @@ export function createRuntimeHttpHandler({
           requestId,
           extraHeaders: { 'retry-after': String(rate.retryAfterSeconds) }
         });
+      }
+
+      if (req.method === 'GET' && path === '/v1/account/learner') {
+        const account = await requireAccountAccess(req);
+        return send(res, 200, { learner: await findLearnerForAccount(account.id) }, { corsOrigin, requestId });
+      }
+
+      if (req.method === 'POST' && path === '/v1/account/claim') {
+        const account = await requireAccountAccess(req);
+        const body = await readJson(req, maxBodyBytes);
+        const learnerId = assertUuid(body.learnerId, 'learnerId');
+        const guestToken = headerValue(req, 'x-citizenai-guest-token');
+        if (!guestToken || !await authorizeGuestLearner(learnerId, guestToken)) {
+          throw httpError(401, 'valid guest learner proof is required');
+        }
+        const result = await claimLearnerForAccount(learnerId, account.id);
+        if (!result?.ok) {
+          if (result?.reason === 'learner_not_found') throw httpError(404, 'learner not found');
+          if (result?.reason === 'account_already_has_learner') throw httpError(409, 'account already has a learner');
+          if (result?.reason === 'learner_already_claimed') throw httpError(409, 'learner is already claimed');
+          throw httpError(409, 'learner could not be claimed');
+        }
+        return send(res, 200, { claimed: true, learner: result.learner }, { corsOrigin, requestId });
       }
 
       if (req.method === 'POST' && path === '/v1/learners') {
