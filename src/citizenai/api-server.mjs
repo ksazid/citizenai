@@ -51,6 +51,12 @@ export function assertRuntimeLaunchPolicy({ environment = 'development', allowed
   throw new Error('production runtime launch is blocked until consumer authentication is implemented and remaining release gates are complete');
 }
 
+export function assertAccountAuthConfiguration({ environment = 'development', configured = false, injected = false } = {}) {
+  if (environment === 'development' || environment === 'test' || injected) return true;
+  if (!configured) throw new Error('Supabase Auth server configuration is required outside development/test');
+  return true;
+}
+
 export async function createPostgresPool(databaseUrl = process.env.DATABASE_URL) {
   if (!databaseUrl) throw new Error('DATABASE_URL is required');
   const { Pool } = await import('pg');
@@ -92,9 +98,16 @@ export async function startCitizenAIServer(options = {}) {
   const repository = options.repository ?? new PostgresRuntimeRepository(pool);
   const ownershipRepository = options.ownershipRepository ?? new PostgresAccountOwnershipRepository(pool);
   const service = options.service ?? createRuntimeService({ repository });
+  const injectedAccountAuth = typeof options.authenticateAccount === 'function';
   const authenticateAccount = options.authenticateAccount ?? createSupabaseAuthVerifier({
     supabaseUrl: options.supabaseUrl ?? process.env.SUPABASE_URL,
-    publishableKey: options.supabasePublishableKey ?? process.env.SUPABASE_PUBLISHABLE_KEY
+    publishableKey: options.supabasePublishableKey ?? process.env.SUPABASE_PUBLISHABLE_KEY,
+    timeoutMs: options.authVerificationTimeoutMs ?? process.env.CITIZENAI_AUTH_VERIFY_TIMEOUT_MS
+  });
+  assertAccountAuthConfiguration({
+    environment,
+    configured: authenticateAccount?.configured === true,
+    injected: injectedAccountAuth
   });
 
   const authorizeGuestLearner = async (learnerId, token) => verifyGuestAccessToken({ learnerId, token, secret: guestTokenSecret });
