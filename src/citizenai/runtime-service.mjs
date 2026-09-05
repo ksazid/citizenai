@@ -9,7 +9,55 @@ import { canUnlockPassReady, maintenanceMode, recordExamOutcome } from './pass-r
 import { UK_ACTIVE_PACK, UK_ACTIVE_PACK_MANIFEST, validateUkActivePack } from './uk-active-pack.mjs';
 
 const DOMAINS = ['government', 'history', 'rights', 'culture'];
+const SESSION_TYPES = new Set(['diagnostic', 'practice', 'mock']);
+const EXAM_RESULTS = new Set(['passed', 'failed', 'rescheduled']);
+const LEARNER_FIELDS = new Set(['examDate', 'explanationLanguage', 'preparation']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const nowIso = () => new Date().toISOString();
+
+function requestError(statusCode, message) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+function assertPlainObject(value, label = 'input') {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) throw requestError(400, `${label} must be an object`);
+  return value;
+}
+
+function assertKnownKeys(value, allowed, label = 'input') {
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length > 0) throw requestError(400, `${label} contains unsupported field: ${unknown[0]}`);
+}
+
+function assertUuid(value, label) {
+  if (typeof value !== 'string' || !UUID_RE.test(value)) throw requestError(400, `${label} must be a valid UUID`);
+  return value;
+}
+
+function shortString(value, label, maxLength = 128) {
+  if (typeof value !== 'string') throw requestError(400, `${label} must be a string`);
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) throw requestError(400, `${label} is invalid`);
+  return normalized;
+}
+
+function examDate(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw requestError(400, 'examDate must use YYYY-MM-DD');
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw requestError(400, 'examDate is not a valid calendar date');
+  return value;
+}
+
+function sanitizeLearnerInput(input = {}) {
+  assertPlainObject(input);
+  assertKnownKeys(input, LEARNER_FIELDS);
+  const safe = {};
+  if ('examDate' in input) safe.examDate = examDate(input.examDate);
+  if ('explanationLanguage' in input) safe.explanationLanguage = shortString(input.explanationLanguage, 'explanationLanguage', 64);
+  if ('preparation' in input) safe.preparation = shortString(input.preparation, 'preparation', 64);
+  return safe;
+}
 
 function assertPack() {
   const validation = validateUkActivePack();
@@ -35,6 +83,14 @@ export function createRuntimeService({ repository }) {
   assertPack();
   const conceptsById = conceptMap();
   const questionsById = questionMap();
+  const finishingMocks = new Set();
+
+  async function requireLearner(learnerId) {
+    assertUuid(learnerId, 'learnerId');
+    const learner = await repository.getLearner(learnerId);
+    if (!learner) throw requestError(404, 'learner not found');
+    return learner;
+  }
 
   async function loadMasteryMap(learnerId) {
     const rows = await repository.listMasteries(learnerId);
@@ -64,24 +120,26 @@ export function createRuntimeService({ repository }) {
   }
 
   async function createLearner(input = {}) {
+    const safe = sanitizeLearnerInput(input);
     const learner = await repository.createLearner({
       countryPackId: UK_ACTIVE_PACK_MANIFEST.id,
-      examDate: input.examDate ?? null,
-      explanationLanguage: input.explanationLanguage ?? 'English',
-      preparation: input.preparation ?? 'Some'
+      examDate: safe.examDate ?? null,
+      explanationLanguage: safe.explanationLanguage ?? 'English',
+      preparation: safe.preparation ?? 'Some'
     });
     return { ...learner, pack: { id: UK_ACTIVE_PACK_MANIFEST.id, version: UK_ACTIVE_PACK_MANIFEST.version } };
   }
 
   async function updateLearner(learnerId, patch) {
-    const learner = await repository.updateLearner(learnerId, patch);
-    if (!learner) throw Object.assign(new Error('learner not found'), { statusCode: 404 });
+    assertUuid(learnerId, 'learnerId');
+    const safe = sanitizeLearnerInput(patch);
+    const learner = await repository.updateLearner(learnerId, safe);
+    if (!learner) throw requestError(404, 'learner not found');
     return learner;
   }
 
   async function dashboard(learnerId) {
-    const learner = await repository.getLearner(learnerId);
-    if (!learner) throw Object.assign(new Error('learner not found'), { statusCode: 404 });
+    const learner = await requireLearner(learnerId);
     const attempts = await repository.listAttempts(learnerId);
     const mocks = await repository.listMocks(learnerId);
     const signals = await buildSignals(learnerId);
@@ -128,6 +186,7 @@ export function createRuntimeService({ repository }) {
   }
 
   async function nextDiagnosticQuestion(learnerId) {
+    await requireLearner(learnerId);
     const attempts = (await repository.listAttempts(learnerId)).filter((attempt) => attempt.sessionType === 'diagnostic');
     const attemptsByConcept = new Map();
     for (const attempt of attempts) attemptsByConcept.set(attempt.conceptId, (attemptsByConcept.get(attempt.conceptId) ?? 0) + 1);
@@ -140,50 +199,65 @@ export function createRuntimeService({ repository }) {
   }
 
   async function recordAttempt(input) {
-    const learner = await repository.getLearner(input.learnerId);
-    if (!learner) throw Object.assign(new Error('learner not found'), { statusCode: 404 });
-    const question = questionsById.get(input.questionId);
-    if (!question) throw Object.assign(new Error('question not found'), { statusCode: 404 });
-    const masteries = await loadMasteryMap(input.learnerId);
+    assertPlainObject(input);
+    assertKnownKeys(input, new Set(['learnerId', 'questionId', 'optionId', 'sessionType', 'responseMs']));
+    const learnerId = assertUuid(input.learnerId, 'learnerId');
+    await requireLearner(learnerId);
+    const questionId = shortString(input.questionId, 'questionId', 160);
+    const question = questionsById.get(questionId);
+    if (!question) throw requestError(404, 'question not found');
+    const sessionType = input.sessionType ?? 'practice';
+    if (!SESSION_TYPES.has(sessionType)) throw requestError(400, 'sessionType is invalid');
+    const optionId = input.optionId ?? null;
+    if (optionId !== null) {
+      shortString(optionId, 'optionId', 160);
+      if (!question.options.some((option) => option.id === optionId)) throw requestError(400, 'optionId is not valid for this question');
+    }
+    const responseMs = input.responseMs ?? null;
+    if (responseMs !== null && (!Number.isInteger(responseMs) || responseMs < 0 || responseMs > 3_600_000)) {
+      throw requestError(400, 'responseMs is invalid');
+    }
+
+    const masteries = await loadMasteryMap(learnerId);
     const previous = masteries.get(question.conceptId);
-    const correct = input.optionId === question.correctOptionId;
+    const correct = optionId === question.correctOptionId;
     const at = nowIso();
     const next = updateMastery(previous, {
       correct,
       difficulty: question.difficulty,
       variantId: question.variantId,
       isUnseenVariant: !(previous.variantIds ?? []).includes(question.variantId),
-      responseQuality: input.sessionType === 'mock' ? 0.8 : 1,
+      responseQuality: sessionType === 'mock' ? 0.8 : 1,
       at
     });
     await repository.recordAttempt({
-      learnerId: input.learnerId,
+      learnerId,
       questionId: question.id,
       conceptId: question.conceptId,
-      sessionType: input.sessionType ?? 'practice',
-      optionId: input.optionId ?? null,
+      sessionType,
+      optionId,
       correct,
-      responseMs: input.responseMs ?? null,
+      responseMs,
       variantId: question.variantId,
       difficulty: question.difficulty,
       attemptedAt: at
     });
     await repository.upsertMastery({
-      learnerId: input.learnerId,
+      learnerId,
       conceptId: question.conceptId,
       state: next,
       masteryMean: masteryMean(next),
       masteryConfidence: masteryConfidence(next),
       retention: retentionAt(next, at)
     });
-    const remediation = input.sessionType === 'practice'
+    const remediation = sessionType === 'practice'
       ? remediationForAttempt({ correct, misconceptionCode: correct ? null : question.misconceptionCode, retention: retentionAt(next, at) })
       : null;
-    const attempts = (await repository.listAttempts(input.learnerId)).filter((attempt) => attempt.sessionType === 'diagnostic');
+    const attempts = (await repository.listAttempts(learnerId)).filter((attempt) => attempt.sessionType === 'diagnostic');
     const testedDomains = new Set(attempts.map((attempt) => conceptsById.get(attempt.conceptId)?.domainId).filter(Boolean));
     const important = UK_ACTIVE_PACK.concepts.filter((concept) => concept.importance >= 0.75);
     const testedImportant = new Set(attempts.map((attempt) => attempt.conceptId));
-    const diagnosticDone = input.sessionType === 'diagnostic' ? shouldCompleteDiagnostic({
+    const diagnosticDone = sessionType === 'diagnostic' ? shouldCompleteDiagnostic({
       answeredCount: attempts.length,
       minimumQuestions: 20,
       maximumQuestions: 24,
@@ -209,8 +283,7 @@ export function createRuntimeService({ repository }) {
   }
 
   async function startMock(learnerId) {
-    const learner = await repository.getLearner(learnerId);
-    if (!learner) throw Object.assign(new Error('learner not found'), { statusCode: 404 });
+    await requireLearner(learnerId);
     const previous = await repository.listMocks(learnerId);
     const state = createMock({ questionPool: UK_ACTIVE_PACK.questions, seed: 42 + previous.length });
     const id = crypto.randomUUID();
@@ -218,46 +291,78 @@ export function createRuntimeService({ repository }) {
     return { id, questions: state.questions.map(publicQuestion), durationMinutes: 45, questionCount: 24 };
   }
 
-  async function answerMock(mockId, { questionId, optionId }) {
+  async function answerMock(mockId, input) {
+    assertUuid(mockId, 'mockId');
+    assertPlainObject(input);
+    assertKnownKeys(input, new Set(['questionId', 'optionId']));
     const row = await repository.getMock(mockId);
-    if (!row) throw Object.assign(new Error('mock not found'), { statusCode: 404 });
+    if (!row) throw requestError(404, 'mock not found');
+    if (row.status === 'completed') throw requestError(409, 'mock is already completed');
+    if (row.status !== 'in_progress') throw requestError(409, 'mock is not active');
+    const questionId = shortString(input.questionId, 'questionId', 160);
+    const optionId = shortString(input.optionId, 'optionId', 160);
+    const question = row.state.questions.find((candidate) => candidate.id === questionId);
+    if (!question) throw requestError(400, 'question is not part of this mock');
+    if (!question.options.some((option) => option.id === optionId)) throw requestError(400, 'optionId is not valid for this question');
     const next = recordMockAnswer(row.state, { questionId, optionId });
     await repository.saveMock({ ...row, state: next, status: 'in_progress' });
-    return { saved: true, answered: Object.keys(next.answers ?? {}).length };
+    return { saved: true, answered: next.answers?.length ?? 0 };
   }
 
   async function finishMock(mockId) {
+    assertUuid(mockId, 'mockId');
     const row = await repository.getMock(mockId);
-    if (!row) throw Object.assign(new Error('mock not found'), { statusCode: 404 });
-    const result = completeMock(row.state);
-    for (const graded of result.gradedAnswers) {
-      await recordAttempt({ learnerId: row.learnerId, questionId: graded.questionId, optionId: graded.optionId, sessionType: 'mock' });
+    if (!row) throw requestError(404, 'mock not found');
+    if (row.status === 'completed') return { ...row.state, dashboard: await dashboard(row.learnerId) };
+    if (row.status !== 'in_progress') throw requestError(409, 'mock is not active');
+    if (finishingMocks.has(mockId)) throw requestError(409, 'mock completion is already in progress');
+
+    finishingMocks.add(mockId);
+    try {
+      const result = completeMock(row.state);
+      for (const graded of result.gradedAnswers) {
+        await recordAttempt({ learnerId: row.learnerId, questionId: graded.questionId, optionId: graded.optionId, sessionType: 'mock' });
+      }
+      await repository.saveMock({
+        ...row,
+        state: result,
+        status: 'completed',
+        passed: result.passed,
+        score: result.score,
+        completedAt: nowIso()
+      });
+      return { ...result, dashboard: await dashboard(row.learnerId) };
+    } finally {
+      finishingMocks.delete(mockId);
     }
-    await repository.saveMock({
-      ...row,
-      state: result,
-      status: 'completed',
-      passed: result.passed,
-      score: result.score,
-      completedAt: nowIso()
-    });
-    return { ...result, dashboard: await dashboard(row.learnerId) };
   }
 
   async function saveExamOutcome(input) {
+    assertPlainObject(input);
+    assertKnownKeys(input, new Set(['learnerId', 'result', 'consentToCalibration', 'feedback']));
+    const learnerId = assertUuid(input.learnerId, 'learnerId');
+    await requireLearner(learnerId);
+    if (!EXAM_RESULTS.has(input.result)) throw requestError(400, 'result is invalid');
+    if ('consentToCalibration' in input && typeof input.consentToCalibration !== 'boolean') throw requestError(400, 'consentToCalibration must be boolean');
+    if ('feedback' in input) assertPlainObject(input.feedback, 'feedback');
     const outcome = recordExamOutcome({
       result: input.result,
       consentToCalibration: Boolean(input.consentToCalibration),
       feedback: input.feedback ?? {}
     });
-    return repository.saveExamOutcome({ learnerId: input.learnerId, ...outcome });
+    return repository.saveExamOutcome({ learnerId, ...outcome });
   }
 
   async function saveSnapshot(learnerId, state) {
+    await requireLearner(learnerId);
+    if (state === undefined) throw requestError(400, 'snapshot state is required');
     return repository.saveSnapshot({ learnerId, packVersion: UK_ACTIVE_PACK_MANIFEST.version, state });
   }
 
-  async function getSnapshot(learnerId) { return repository.getSnapshot(learnerId); }
+  async function getSnapshot(learnerId) {
+    await requireLearner(learnerId);
+    return repository.getSnapshot(learnerId);
+  }
 
   return Object.freeze({
     createLearner,
