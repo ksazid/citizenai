@@ -8,15 +8,17 @@ Supabase PostgreSQL -> CitizenAI Runtime API on Render -> Expo mobile app
 
 The API remains the only application layer that writes learner runtime data. The mobile app does not talk directly to Supabase.
 
-## Required secret
+## Required secrets
 
 `DATABASE_URL` must be the Supabase PostgreSQL connection string. Do not commit it to GitHub.
 
-The API already uses TLS for hosted PostgreSQL unless `PGSSL=disable` is set, so no Supabase-specific database adapter is required.
+`PGSSLROOTCERT_PEM` must contain the Supabase Server root certificate PEM from the project's Database Settings / SSL Configuration. Store it as a Render secret; do not commit the certificate to GitHub.
+
+Hosted PostgreSQL connections are fail-closed: TLS certificate and hostname verification are enabled. `PGSSL=disable` is only for trusted local PostgreSQL integration tests.
 
 ## Verification
 
-From the repository root with `DATABASE_URL` configured:
+From the repository root with `DATABASE_URL` and `PGSSLROOTCERT_PEM` configured:
 
 ```bash
 npm install
@@ -34,6 +36,7 @@ Use:
 - Build command: `npm install --no-audit --no-fund`
 - Start command: `npm run start:api`
 - Environment: `DATABASE_URL=<Supabase Postgres connection string>`
+- Environment secret: `PGSSLROOTCERT_PEM=<Supabase Server root certificate PEM>`
 - Environment: `CITIZENAI_ALLOWED_ORIGIN=*` for staging only
 
 After deploy, `/healthz` must return `ok: true` before the mobile app is pointed at the service.
