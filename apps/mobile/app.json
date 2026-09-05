@@ -2,6 +2,7 @@
   "expo": {
     "name": "CitizenAI",
     "slug": "citizenai",
+    "owner": "ksazids-team",
     "scheme": "citizenai",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -15,6 +16,11 @@
       "package": "ai.citizen.mobile",
       "versionCode": 1
     },
-    "web": { "bundler": "metro" }
+    "web": { "bundler": "metro" },
+    "extra": {
+      "eas": {
+        "projectId": "08717dc8-a438-45c3-b404-31c2465d5268"
+      }
+    }
   }
 }
