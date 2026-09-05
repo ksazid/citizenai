@@ -15,10 +15,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
 
-      - name: Install Expo mobile dependencies
+      - name: Install locked E2E dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install locked Expo mobile dependencies
         working-directory: apps/mobile
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Export staging-connected Expo web build
         working-directory: apps/mobile
@@ -27,9 +34,6 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: https://jvnlknxzmozdxsmtozdg.supabase.co
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_EorBWfY5dfoQZcgwoFOaeA_Mp_0B3e5
         run: npx expo export --platform web --output-dir dist-staging
-
-      - name: Install browser driver
-        run: npm install --no-save --no-audit --no-fund playwright-core@1.55.0
 
       - name: Run onboarding to restart persistence E2E
         env:
