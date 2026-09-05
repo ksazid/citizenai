@@ -9,6 +9,28 @@ permissions:
   contents: read
 
 jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/mobile/package-lock.json
+      - name: Install API dependencies from lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Audit API production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Install mobile dependencies from lockfile
+        working-directory: apps/mobile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Audit mobile production dependencies
+        working-directory: apps/mobile
+        run: npm audit --omit=dev --audit-level=high
+
   validate:
     runs-on: ubuntu-latest
     steps:
@@ -17,8 +39,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: package.json
-      - run: npm install --no-audit --no-fund
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
       - run: npm run preflight
 
   runtime-postgres-integration:
@@ -43,8 +65,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: package.json
-      - run: npm install --no-audit --no-fund
+          cache-dependency-path: package-lock.json
+      - run: npm ci --no-audit --no-fund
       - name: Run PostgreSQL runtime integration
         env:
           CITIZENAI_TEST_DATABASE_URL: postgresql://citizenai:citizenai@127.0.0.1:5432/citizenai
@@ -78,8 +100,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: apps/mobile/package.json
-      - run: npm install --no-audit --no-fund
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
       - name: Verify Expo dependency compatibility
         run: npx expo install --check
       - run: npx tsc --noEmit
@@ -105,8 +127,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-          cache-dependency-path: apps/mobile/package.json
-      - run: npm install --no-audit --no-fund
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
       - run: npx expo export --platform web --output-dir dist
       - name: Capture approved visual anchors
         run: |
@@ -141,7 +163,7 @@ jobs:
           if-no-files-found: error
 
   uk-release-package:
-    needs: [validate, uk-source-snapshot-backfill, mobile-typecheck, visual-anchor-capture]
+    needs: [validate, dependency-audit, uk-source-snapshot-backfill, mobile-typecheck, visual-anchor-capture]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
