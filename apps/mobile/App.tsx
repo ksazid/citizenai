@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { accountEnhancedScreens } from './src/accountEnhancedScreens';
+import { CitizenAIAuthProvider, useCitizenAIAuth } from './src/auth';
 import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { BottomTabs } from './src/components';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
@@ -41,6 +43,7 @@ function MobileApp() {
       ?? integratedCoreScreens[current]
       ?? integratedLearningScreens[current]
       ?? integratedSourceInfoScreen[current]
+      ?? accountEnhancedScreens[current]
       ?? integratedLifecycleScreens[current]
       ?? approvedAnchorScreens[current]
       ?? screenComponents[current];
@@ -77,10 +80,22 @@ function MobileApp() {
   );
 }
 
+function RuntimeBoundary() {
+  const auth = useCitizenAIAuth();
+  if (auth.loading) {
+    return <View style={styles.loading}><ActivityIndicator size="small" color={theme.color.primary} /></View>;
+  }
+  return (
+    <CitizenAIRuntimeProvider key={auth.session?.user.id ?? 'guest'}>
+      <MobileApp />
+    </CitizenAIRuntimeProvider>
+  );
+}
+
 export default function App() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-      <CitizenAIRuntimeProvider><MobileApp /></CitizenAIRuntimeProvider>
+      <CitizenAIAuthProvider><RuntimeBoundary /></CitizenAIAuthProvider>
     </SafeAreaProvider>
   );
 }
@@ -92,5 +107,6 @@ const styles = StyleSheet.create({
   auraSide: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: 290, right: -245, backgroundColor: 'rgba(22,163,161,0.055)' },
   scroll: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 22 },
-  tabOverlay: { position: 'absolute', left: 20, right: 20 }
+  tabOverlay: { position: 'absolute', left: 20, right: 20 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.background }
 });
