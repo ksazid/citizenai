@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { currentAccountAccessToken } from './supabaseClient';
+import {
+  deleteGuestAccessToken,
+  readGuestAccessToken,
+  writeGuestAccessToken
+} from './sessionStorage';
 
 declare const process: { env: { EXPO_PUBLIC_CITIZENAI_API_URL?: string } };
 
@@ -19,38 +23,11 @@ type RequestInitLike = {
   body?: string;
 };
 
-const ACCESS_TOKEN_PREFIX = 'citizenai.runtime.guestAccess.v1.';
 const MOCK_LEARNER_PREFIX = 'citizenai.runtime.mockLearner.v1.';
 
 // Expo substitutes EXPO_PUBLIC_* values only when referenced with static dot notation.
 const configuredBaseUrl = () => String(process.env.EXPO_PUBLIC_CITIZENAI_API_URL ?? '').replace(/\/$/, '');
-const learnerTokenKey = (learnerId: string) => `${ACCESS_TOKEN_PREFIX}${learnerId}`;
 const mockLearnerKey = (mockId: string) => `${MOCK_LEARNER_PREFIX}${mockId}`;
-
-async function readAccessToken(learnerId: string) {
-  const key = learnerTokenKey(learnerId);
-  if (Platform.OS === 'web') return AsyncStorage.getItem(key);
-
-  const secureValue = await SecureStore.getItemAsync(key);
-  if (secureValue) return secureValue;
-
-  // One-time migration for Expo Go sessions created before encrypted token storage.
-  const legacyValue = await AsyncStorage.getItem(key);
-  if (!legacyValue) return null;
-  await SecureStore.setItemAsync(key, legacyValue);
-  await AsyncStorage.removeItem(key);
-  return legacyValue;
-}
-
-async function writeAccessToken(learnerId: string, token: string) {
-  const key = learnerTokenKey(learnerId);
-  if (Platform.OS === 'web') {
-    await AsyncStorage.setItem(key, token);
-    return;
-  }
-  await SecureStore.setItemAsync(key, token);
-  await AsyncStorage.removeItem(key);
-}
 
 export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
   const enabled = Boolean(baseUrl);
@@ -70,8 +47,34 @@ export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
     return payload as T;
   }
 
+  async function claimGuestLearner(learnerId: string, guestToken: string, accountToken: string) {
+    const result = await request<any>('/v1/account/claim', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accountToken}`,
+        'x-citizenai-guest-token': guestToken
+      },
+      body: JSON.stringify({ learnerId })
+    });
+    await deleteGuestAccessToken(learnerId);
+    return result;
+  }
+
   async function learnerHeaders(learnerId: string) {
-    const token = await readAccessToken(learnerId);
+    const [guestToken, accountToken] = await Promise.all([
+      readGuestAccessToken(learnerId),
+      currentAccountAccessToken()
+    ]);
+
+    if (guestToken && accountToken) {
+      await claimGuestLearner(learnerId, guestToken, accountToken);
+      return {
+        'x-citizenai-learner-id': learnerId,
+        authorization: `Bearer ${accountToken}`
+      };
+    }
+
+    const token = guestToken ?? accountToken;
     return {
       'x-citizenai-learner-id': learnerId,
       ...(token ? { authorization: `Bearer ${token}` } : {})
@@ -94,7 +97,7 @@ export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
     health: () => request<{ ok: boolean }>('/healthz'),
     createLearner: async (body: { examDate?: string | null; explanationLanguage?: string; preparation?: string }) => {
       const learner = await request<any>('/v1/learners', { method: 'POST', body: JSON.stringify(body) });
-      if (learner?.id && learner?.accessToken) await writeAccessToken(learner.id, learner.accessToken);
+      if (learner?.id && learner?.accessToken) await writeGuestAccessToken(learner.id, learner.accessToken);
       return learner;
     },
     updateLearner: (learnerId: string, body: { examDate?: string | null; explanationLanguage?: string; preparation?: string }) =>
