@@ -35,8 +35,16 @@ export async function createPostgresPool(databaseUrl = process.env.DATABASE_URL)
 }
 
 export async function migrateRuntime(pool) {
-  const sql = await fs.readFile(path.resolve('db/migrations/001_citizenai_runtime.sql'), 'utf8');
-  await pool.query(sql);
+  const migrationDirectory = path.resolve('db/migrations');
+  const migrationFiles = (await fs.readdir(migrationDirectory))
+    .filter((file) => /^\d+_.*\.sql$/.test(file))
+    .sort((left, right) => left.localeCompare(right));
+  if (migrationFiles.length === 0) throw new Error('no CitizenAI runtime migrations found');
+
+  for (const file of migrationFiles) {
+    const sql = await fs.readFile(path.join(migrationDirectory, file), 'utf8');
+    await pool.query(sql);
+  }
 }
 
 export async function startCitizenAIServer(options = {}) {
