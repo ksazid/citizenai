@@ -77,7 +77,8 @@ export function CitizenAIAuthProvider({ children }: { children: React.ReactNode 
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supabase) {
+    const authClient = supabase;
+    if (!authClient) {
       setLoading(false);
       return;
     }
@@ -104,7 +105,7 @@ export function CitizenAIAuthProvider({ children }: { children: React.ReactNode 
       }
     };
 
-    void supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    void authClient.auth.getSession().then(({ data, error: sessionError }) => {
       if (sessionError) {
         setError(sessionError.message);
         setLoading(false);
@@ -113,13 +114,13 @@ export function CitizenAIAuthProvider({ children }: { children: React.ReactNode 
       void applySession(data.session, 'INITIAL_SESSION');
     });
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, next) => {
+    const { data: authListener } = authClient.auth.onAuthStateChange((event, next) => {
       setTimeout(() => { void applySession(next, event); }, 0);
     });
 
     const appStateListener = AppState.addEventListener('change', (state) => {
-      if (state === 'active') supabase.auth.startAutoRefresh();
-      else supabase.auth.stopAutoRefresh();
+      if (state === 'active') authClient.auth.startAutoRefresh();
+      else authClient.auth.stopAutoRefresh();
     });
 
     return () => {
