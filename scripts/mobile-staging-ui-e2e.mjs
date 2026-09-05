@@ -16,8 +16,11 @@ async function waitUntil(predicate, { timeoutMs = 60_000, intervalMs = 250, mess
   throw new Error(message);
 }
 
-async function jsonRequest(path) {
-  const response = await fetch(`${apiUrl}${path}`);
+async function jsonRequest(path, { learnerId = null, accessToken = null } = {}) {
+  const headers = {};
+  if (learnerId) headers['x-citizenai-learner-id'] = learnerId;
+  if (accessToken) headers.authorization = `Bearer ${accessToken}`;
+  const response = await fetch(`${apiUrl}${path}`, { headers: Object.keys(headers).length ? headers : undefined });
   assert.equal(response.ok, true, `${path} returned ${response.status}`);
   return response.json();
 }
@@ -44,6 +47,7 @@ const browser = await chromium.launch({
 const context = await browser.newContext({ viewport: { width: 430, height: 932 } });
 const page = await context.newPage();
 const learnerIds = [];
+const learnerTokens = new Map();
 let restoredDashboardSeen = false;
 let learnerId = null;
 
@@ -56,15 +60,20 @@ page.on('response', async (response) => {
     if (request.method() === 'POST' && response.url() === `${apiUrl}/v1/learners` && response.ok()) {
       const body = await response.json();
       if (body?.id) learnerIds.push(body.id);
+      if (body?.id && body?.accessToken) learnerTokens.set(body.id, body.accessToken);
     }
-    if (learnerId && request.method() === 'GET' && response.url().startsWith(`${apiUrl}/v1/dashboard?`) && response.url().includes(encodeURIComponent(learnerId)) && response.ok()) {
-      restoredDashboardSeen = true;
+    if (learnerId && request.method() === 'GET' && response.url().startsWith(`${apiUrl}/v1/dashboard`) && response.ok()) {
+      const headers = request.headers();
+      const learnerFromHeader = headers['x-citizenai-learner-id'];
+      const learnerFromQuery = response.url().includes(encodeURIComponent(learnerId));
+      if (learnerFromHeader === learnerId || learnerFromQuery) restoredDashboardSeen = true;
     }
   } catch {
     // Response may have been consumed or closed. The E2E assertions below remain authoritative.
   }
 });
 
+const authFor = (id) => ({ learnerId: id, accessToken: learnerTokens.get(id) ?? null });
 const bodyText = () => page.locator('body').innerText().catch(() => '');
 const bodyIncludes = async (text) => (await bodyText()).includes(text);
 const bodyMatches = async (pattern) => pattern.test(await bodyText());
@@ -105,11 +114,11 @@ try {
   }
 
   await waitUntil(async () => {
-    const dashboard = await jsonRequest(`/v1/dashboard?learnerId=${encodeURIComponent(learnerId)}`);
+    const dashboard = await jsonRequest('/v1/dashboard', authFor(learnerId));
     return dashboard.diagnosticAnswered >= 20;
   }, { timeoutMs: 60_000, intervalMs: 500, message: 'diagnostic attempts did not persist to Supabase' });
 
-  const dashboardAfterDiagnostic = await jsonRequest(`/v1/dashboard?learnerId=${encodeURIComponent(learnerId)}`);
+  const dashboardAfterDiagnostic = await jsonRequest('/v1/dashboard', authFor(learnerId));
   assert.equal(dashboardAfterDiagnostic.pack.version, '2026.09.02.1');
   assert.ok(dashboardAfterDiagnostic.studyPlan?.activities?.length > 0, 'server did not return a study plan');
 
@@ -132,7 +141,7 @@ try {
   await waitUntil(() => bodyIncludes('Your readiness'), { timeoutMs: 15_000, message: 'Home readiness did not render after restart' });
   await waitUntil(() => bodyIncludes('Today’s plan'), { timeoutMs: 15_000, message: 'Home study plan did not render after restart' });
 
-  const dashboardAfterRestart = await jsonRequest(`/v1/dashboard?learnerId=${encodeURIComponent(learnerId)}`);
+  const dashboardAfterRestart = await jsonRequest('/v1/dashboard', authFor(learnerId));
   assert.equal(dashboardAfterRestart.diagnosticAnswered, dashboardAfterDiagnostic.diagnosticAnswered, 'diagnostic evidence changed across restart');
   assert.equal(dashboardAfterRestart.pack.version, dashboardAfterDiagnostic.pack.version, 'pack version changed across restart');
   assert.ok(dashboardAfterRestart.studyPlan?.activities?.length > 0, 'study plan disappeared across restart');
@@ -142,6 +151,7 @@ try {
     webUrl,
     apiUrl,
     learnerId,
+    guestTokenObserved: learnerTokens.has(learnerId),
     packVersion: dashboardAfterRestart.pack.version,
     diagnosticAnswered: dashboardAfterRestart.diagnosticAnswered,
     readinessScorePercent: dashboardAfterRestart.readiness.scorePercent,
