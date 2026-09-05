@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 declare const process: { env: { EXPO_PUBLIC_CITIZENAI_API_URL?: string } };
 
@@ -25,6 +27,31 @@ const configuredBaseUrl = () => String(process.env.EXPO_PUBLIC_CITIZENAI_API_URL
 const learnerTokenKey = (learnerId: string) => `${ACCESS_TOKEN_PREFIX}${learnerId}`;
 const mockLearnerKey = (mockId: string) => `${MOCK_LEARNER_PREFIX}${mockId}`;
 
+async function readAccessToken(learnerId: string) {
+  const key = learnerTokenKey(learnerId);
+  if (Platform.OS === 'web') return AsyncStorage.getItem(key);
+
+  const secureValue = await SecureStore.getItemAsync(key);
+  if (secureValue) return secureValue;
+
+  // One-time migration for Expo Go sessions created before encrypted token storage.
+  const legacyValue = await AsyncStorage.getItem(key);
+  if (!legacyValue) return null;
+  await SecureStore.setItemAsync(key, legacyValue);
+  await AsyncStorage.removeItem(key);
+  return legacyValue;
+}
+
+async function writeAccessToken(learnerId: string, token: string) {
+  const key = learnerTokenKey(learnerId);
+  if (Platform.OS === 'web') {
+    await AsyncStorage.setItem(key, token);
+    return;
+  }
+  await SecureStore.setItemAsync(key, token);
+  await AsyncStorage.removeItem(key);
+}
+
 export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
   const enabled = Boolean(baseUrl);
 
@@ -44,7 +71,7 @@ export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
   }
 
   async function learnerHeaders(learnerId: string) {
-    const token = await AsyncStorage.getItem(learnerTokenKey(learnerId));
+    const token = await readAccessToken(learnerId);
     return {
       'x-citizenai-learner-id': learnerId,
       ...(token ? { authorization: `Bearer ${token}` } : {})
@@ -57,7 +84,7 @@ export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
 
   async function mockRequest<T>(mockId: string, path: string, init: RequestInitLike = {}) {
     const learnerId = await AsyncStorage.getItem(mockLearnerKey(mockId));
-    if (!learnerId) return request<T>(path, init); // Backward-compatible while old staging is still deployed.
+    if (!learnerId) return request<T>(path, init);
     return learnerRequest<T>(learnerId, path, init);
   }
 
@@ -67,7 +94,7 @@ export function createCitizenAIApiClient(baseUrl = configuredBaseUrl()) {
     health: () => request<{ ok: boolean }>('/healthz'),
     createLearner: async (body: { examDate?: string | null; explanationLanguage?: string; preparation?: string }) => {
       const learner = await request<any>('/v1/learners', { method: 'POST', body: JSON.stringify(body) });
-      if (learner?.id && learner?.accessToken) await AsyncStorage.setItem(learnerTokenKey(learner.id), learner.accessToken);
+      if (learner?.id && learner?.accessToken) await writeAccessToken(learner.id, learner.accessToken);
       return learner;
     },
     updateLearner: (learnerId: string, body: { examDate?: string | null; explanationLanguage?: string; preparation?: string }) =>
