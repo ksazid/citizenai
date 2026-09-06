@@ -5,6 +5,7 @@ import { accountEnhancedScreens } from './src/accountEnhancedScreens';
 import { CitizenAIAuthProvider, useCitizenAIAuth } from './src/auth';
 import { approvedAnchorScreens } from './src/approvedAnchorScreens';
 import { BottomTabs, Button, Card, typography } from './src/components';
+import { DiagnosticScreen } from './src/diagnosticScreen';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
 import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
@@ -40,6 +41,7 @@ function MobileApp() {
   const current = history[history.length - 1];
   const activeTab = tabForScreen(current);
   const Screen = useMemo(() => {
+    if (current === 'diagnostic') return DiagnosticScreen;
     return integratedWelcomeScreen[current]
       ?? integratedCoreScreens[current]
       ?? integratedLearningScreens[current]
@@ -88,16 +90,22 @@ function MobileApp() {
       <View style={styles.frame}>
         <View pointerEvents="none" style={styles.auraTop} />
         <View pointerEvents="none" style={styles.auraSide} />
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[styles.content, activeTab && { paddingBottom: tabContentPadding }]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentInsetAdjustmentBehavior="automatic"
-          automaticallyAdjustKeyboardInsets
-        >
-          <Screen navigate={navigate} goBack={goBack} />
-        </ScrollView>
+        {current === 'diagnostic' ? (
+          <View style={styles.fixedContent}>
+            <Screen navigate={navigate} goBack={goBack} />
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[styles.content, activeTab && { paddingBottom: tabContentPadding }]}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentInsetAdjustmentBehavior="automatic"
+            automaticallyAdjustKeyboardInsets
+          >
+            <Screen navigate={navigate} goBack={goBack} />
+          </ScrollView>
+        )}
         {activeTab ? (
           <View pointerEvents="box-none" style={[styles.tabOverlay, { bottom: tabBottom }]}>
             <BottomTabs persistent active={activeTab} navigate={navigate} />
@@ -135,6 +143,7 @@ const styles = StyleSheet.create({
   auraSide: { position: 'absolute', width: 360, height: 360, borderRadius: 180, top: 290, right: -245, backgroundColor: 'rgba(22,163,161,0.055)' },
   scroll: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 22 },
+  fixedContent: { flex: 1 },
   tabOverlay: { position: 'absolute', left: 20, right: 20 },
   loading: { flex: 1, gap: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.background },
   loadingText: { color: theme.color.textMuted, fontSize: 15 },
