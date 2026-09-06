@@ -10,7 +10,8 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function waitUntil(predicate, { timeoutMs = 60_000, intervalMs = 250, message = 'condition timed out' } = {}) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (await predicate()) return;
+    const value = await predicate();
+    if (value) return value;
     await sleep(intervalMs);
   }
   throw new Error(message);
@@ -20,9 +21,23 @@ async function jsonRequest(path, { learnerId = null, accessToken = null } = {}) 
   const headers = {};
   if (learnerId) headers['x-citizenai-learner-id'] = learnerId;
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
-  const response = await fetch(`${apiUrl}${path}`, { headers: Object.keys(headers).length ? headers : undefined });
-  assert.equal(response.ok, true, `${path} returned ${response.status}`);
-  return response.json();
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await fetch(`${apiUrl}${path}`, { headers: Object.keys(headers).length ? headers : undefined });
+    if (response.status === 429 && attempt < 3) {
+      const retryAfterSeconds = Number(response.headers.get('retry-after'));
+      const backoffMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1_000
+        : 5_000 * (attempt + 1);
+      console.log(`[mobile-staging-e2e] ${path} throttled; retrying in ${backoffMs}ms`);
+      await sleep(backoffMs);
+      continue;
+    }
+    assert.equal(response.ok, true, `${path} returned ${response.status}`);
+    return response.json();
+  }
+
+  throw new Error(`${path} remained throttled after retries`);
 }
 
 async function warmStaging() {
@@ -96,6 +111,7 @@ try {
   assert.ok(learnerId, 'missing diagnostic learner id');
 
   const resultPattern = /You’re (Not Ready|Building|Nearly Ready|Pass Ready|Strongly Ready|More evidence needed)/;
+  const diagnosticRetryBackoffMs = [5_000, 15_000, 30_000];
   let diagnosticCompleted = false;
   for (let answer = 0; answer < 24; answer += 1) {
     if (await bodyMatches(resultPattern)) {
@@ -103,16 +119,36 @@ try {
       break;
     }
 
-    await page.getByRole('button', { name: /I don['’]t know/ }).click();
-    await waitUntil(async () => {
-      const text = await bodyText();
-      return resultPattern.test(text) || text.includes(`Diagnostic · ${Math.min(answer + 2, 24)} of ~24`);
-    }, { timeoutMs: 15_000, message: `diagnostic did not advance after unknown answer ${answer + 1}` });
+    const expectedProgress = `Diagnostic · ${Math.min(answer + 2, 24)} of ~24`;
+    let advanced = false;
 
-    if (await bodyMatches(resultPattern)) {
-      diagnosticCompleted = true;
-      break;
+    for (let attempt = 0; attempt < 4 && !advanced && !diagnosticCompleted; attempt += 1) {
+      if (attempt === 0) {
+        // Avoid hammering staging at machine speed; each answer causes both a write and next-question read.
+        await sleep(1_750);
+      } else {
+        const backoffMs = diagnosticRetryBackoffMs[attempt - 1];
+        console.log(`[mobile-staging-e2e] retrying diagnostic answer ${answer + 1} in ${backoffMs}ms`);
+        await sleep(backoffMs);
+      }
+
+      await page.getByRole('button', { name: /I don['’]t know/ }).click();
+      const outcome = await waitUntil(async () => {
+        const text = await bodyText();
+        if (resultPattern.test(text)) return 'result';
+        if (text.includes(expectedProgress)) return 'advanced';
+        if (text.includes('We could not save that answer. Please try again.')) return 'retry';
+        return null;
+      }, { timeoutMs: 20_000, message: `diagnostic did not respond after unknown answer ${answer + 1}` });
+
+      if (outcome === 'result') {
+        diagnosticCompleted = true;
+      } else if (outcome === 'advanced') {
+        advanced = true;
+      }
     }
+
+    assert.equal(advanced || diagnosticCompleted, true, `diagnostic did not advance after retries for unknown answer ${answer + 1}`);
   }
 
   if (!diagnosticCompleted) {
@@ -122,7 +158,7 @@ try {
   await waitUntil(async () => {
     const dashboard = await jsonRequest('/v1/dashboard', authFor(learnerId));
     return dashboard.diagnosticAnswered >= 20;
-  }, { timeoutMs: 60_000, intervalMs: 500, message: 'diagnostic attempts did not persist to Supabase' });
+  }, { timeoutMs: 90_000, intervalMs: 1_000, message: 'diagnostic attempts did not persist to Supabase' });
 
   const dashboardAfterDiagnostic = await jsonRequest('/v1/dashboard', authFor(learnerId));
   assert.equal(dashboardAfterDiagnostic.pack.version, '2026.09.02.1');
