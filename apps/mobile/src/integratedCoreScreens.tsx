@@ -123,7 +123,7 @@ function ProgressOverview({ navigate }: Props) {
 
 function DomainDetail({ navigate, goBack }: Props) {
   const rt = useCitizenAI();
-  const lowest = domainMeta.toSorted((a, b) => rt.domainScores[a.id] - rt.domainScores[b.id])[0];
+  const lowest = [...domainMeta].sort((a, b) => rt.domainScores[a.id] - rt.domainScores[b.id])[0];
   const concepts = rt.studyPlan.activities.map(a => rt.conceptById(a.conceptId)).filter(Boolean);
   return <View style={s.screen}><AppHeader onBack={goBack} /><Text style={typography.h1}>{lowest.name}</Text><Text style={s.intro}>{rt.domainScores[lowest.id]}% current evidence score</Text><ProgressBar value={rt.domainScores[lowest.id]} valueLabel={`${rt.domainScores[lowest.id]}%`} /><Text style={s.sectionTitle}>Priority concepts</Text><Card>{concepts.slice(0, 4).map((c, i) => <ListRow key={c!.id} title={c!.title} meta="Selected by study engine" trailing={i === 0 ? 'High' : 'Medium'} icon={activityIcon(rt.studyPlan.activities[i]?.type ?? 'review')} onPress={() => navigate('concept-detail')} hideDivider={i === Math.min(concepts.length, 4) - 1} />)}</Card><Button label="Study highest priority" onPress={() => navigate(activityRoute(rt.studyPlan.activities[0]?.type ?? 'question'))} /><BottomTabs active="progress" navigate={navigate} /></View>;
 }
