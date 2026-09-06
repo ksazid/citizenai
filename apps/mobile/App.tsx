@@ -1,17 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountEnhancedScreens } from './src/accountEnhancedScreens';
 import { CitizenAIAuthProvider, useCitizenAIAuth } from './src/auth';
 import { approvedAnchorScreens } from './src/approvedAnchorScreens';
-import { BottomTabs } from './src/components';
+import { BottomTabs, Button, Card, typography } from './src/components';
 import { integratedCoreScreens } from './src/integratedCoreScreens';
 import { integratedLearningScreens } from './src/integratedLearningScreens';
 import { integratedLifecycleScreens } from './src/integratedLifecycleScreens';
 import { integratedSourceInfoScreen } from './src/integratedSourceInfoScreen';
 import { integratedWelcomeScreen } from './src/integratedWelcomeScreen';
 import { SCREEN_IDS, ScreenId, TabId } from './src/model';
-import { CitizenAIRuntimeProvider } from './src/runtime';
+import { CitizenAIRuntimeProvider, useCitizenAI } from './src/runtime';
 import './src/verifiedPackInstall';
 import { screenComponents } from './src/screens';
 import { theme } from './src/theme';
@@ -35,6 +35,7 @@ function tabForScreen(screen: ScreenId): TabId | null {
 function MobileApp() {
   const captureScreen = requestedScreen();
   const insets = useSafeAreaInsets();
+  const rt = useCitizenAI();
   const [history, setHistory] = useState<ScreenId[]>([captureScreen ?? 'welcome']);
   const current = history[history.length - 1];
   const activeTab = tabForScreen(current);
@@ -53,6 +54,33 @@ function MobileApp() {
   const goBack = () => setHistory(prev => prev.length > 1 ? prev.slice(0, -1) : prev);
   const tabBottom = Math.max(insets.bottom + 2, 10);
   const tabContentPadding = 108 + insets.bottom;
+
+  if (!rt.visualDemo && rt.backendState === 'connecting' && !rt.hasRemoteState) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={theme.color.background} />
+        <View style={styles.loading}>
+          <ActivityIndicator size="small" color={theme.color.primary} />
+          <Text style={styles.loadingText}>Restoring your progress…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!rt.visualDemo && rt.backendState === 'error' && !rt.hasRemoteState) {
+    return (
+      <SafeAreaView edges={['top', 'left', 'right', 'bottom']} style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={theme.color.background} />
+        <View style={styles.recovery}>
+          <Card style={styles.recoveryCard}>
+            <Text style={typography.h2}>We couldn’t load your progress</Text>
+            <Text style={styles.recoveryText}>Your saved progress has not been replaced. CitizenAI kept the existing learner on this device instead of silently starting again at 0%.</Text>
+            <Button label="Try again" onPress={() => { void rt.retryBackend(); }} />
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
@@ -108,5 +136,9 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 22 },
   tabOverlay: { position: 'absolute', left: 20, right: 20 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.background }
+  loading: { flex: 1, gap: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.background },
+  loadingText: { color: theme.color.textMuted, fontSize: 15 },
+  recovery: { flex: 1, justifyContent: 'center', paddingHorizontal: 20, backgroundColor: theme.color.background },
+  recoveryCard: { gap: 16 },
+  recoveryText: { color: theme.color.textMuted, fontSize: 16, lineHeight: 23 }
 });
