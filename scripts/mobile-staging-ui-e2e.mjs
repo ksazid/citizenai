@@ -103,10 +103,16 @@ try {
       break;
     }
 
-    await page.getByRole('button', { name: 'I don’t know' }).click();
-    const nextButton = page.getByRole('button', { name: /Next question|Finish readiness check/ });
-    await nextButton.click();
-    await sleep(180);
+    await page.getByRole('button', { name: /I don['’]t know/ }).click();
+    await waitUntil(async () => {
+      const text = await bodyText();
+      return resultPattern.test(text) || text.includes(`Diagnostic · ${Math.min(answer + 2, 24)} of ~24`);
+    }, { timeoutMs: 15_000, message: `diagnostic did not advance after unknown answer ${answer + 1}` });
+
+    if (await bodyMatches(resultPattern)) {
+      diagnosticCompleted = true;
+      break;
+    }
   }
 
   if (!diagnosticCompleted) {
