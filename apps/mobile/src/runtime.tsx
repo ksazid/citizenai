@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createCitizenAIApiClient } from './apiClient';
+import { readStoredLearnerId, writeStoredLearnerId } from './sessionStorage';
 
 // These are the production domain engines already certified in the repository.
 // They remain the offline fallback and deterministic visual-test runtime.
@@ -55,6 +55,8 @@ type Runtime = {
   daysUntilExam: number;
   visualDemo: boolean;
   backendState: BackendState;
+  hasRemoteState: boolean;
+  retryBackend: () => Promise<void>;
   learnerId: string | null;
   diagnosticQuestion: Question;
   diagnosticAnswered: number;
@@ -86,7 +88,6 @@ type Runtime = {
 };
 
 const DOMAINS: DomainId[] = ['government', 'history', 'rights', 'culture'];
-const LEARNER_STORAGE_KEY = 'citizenai.runtime.learnerId.v1';
 
 export const CONCEPTS: Concept[] = [
   { id: 'parliament-government', domainId: 'government', title: 'Parliament vs Government', importance: 1, baseDifficulty: 0.62, studyMinutes: 4, misconceptionCode: 'parliament_government_reversal' },
@@ -166,10 +167,26 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
 
   async function createRemoteLearner() {
     const learner = await api.createLearner({ examDate, explanationLanguage, preparation });
-    await AsyncStorage.setItem(LEARNER_STORAGE_KEY, learner.id);
+    await writeStoredLearnerId(learner.id);
     setLearnerId(learner.id);
     await refreshRemote(learner.id);
     return learner.id as string;
+  }
+
+  async function retryBackend() {
+    if (!api.enabled || visualDemo) return;
+    setBackendState('connecting');
+    try {
+      const id = learnerId ?? await readStoredLearnerId();
+      if (id) {
+        setLearnerId(id);
+        await refreshRemote(id);
+        return;
+      }
+      await createRemoteLearner();
+    } catch {
+      setBackendState('error');
+    }
   }
 
   useEffect(() => {
@@ -178,18 +195,16 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
     (async () => {
       try {
         setBackendState('connecting');
-        const storedId = await AsyncStorage.getItem(LEARNER_STORAGE_KEY);
+        const storedId = await readStoredLearnerId();
         if (cancelled) return;
         if (storedId) {
+          setLearnerId(storedId);
           try {
-            await api.dashboard(storedId);
-            if (cancelled) return;
-            setLearnerId(storedId);
             await refreshRemote(storedId);
-            return;
           } catch {
-            await AsyncStorage.removeItem(LEARNER_STORAGE_KEY);
+            if (!cancelled) setBackendState('error');
           }
+          return;
         }
         if (!cancelled) await createRemoteLearner();
       } catch {
@@ -379,7 +394,7 @@ export function CitizenAIRuntimeProvider({ children }: { children: React.ReactNo
 
   const value: Runtime = {
     examDate, explanationLanguage, preparation, setExamDate, setExplanationLanguage, setPreparation,
-    daysUntilExam: isoDaysUntil(examDate), visualDemo, backendState, learnerId,
+    daysUntilExam: isoDaysUntil(examDate), visualDemo, backendState, hasRemoteState: Boolean(remoteDashboard), retryBackend, learnerId,
     diagnosticQuestion,
     diagnosticAnswered: remoteDiagnostic?.answered ?? remoteDashboard?.diagnosticAnswered ?? diagnosticAnswers.length,
     diagnosticTarget: remoteDiagnostic?.target ?? 24,
